@@ -1,5 +1,7 @@
 """Read-side post access shared by API routes and HTML routes."""
 
+from turtle import title
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,13 +23,15 @@ async def get_post_by_id(session: AsyncSession, post_id: int) -> Post | None:
 
 
 async def get_posts_by_user_id(session: AsyncSession, user_id: int) -> list[Post]:
-    stmt = select(Post).options(selectinload(Post.author)).where(Post.user_id == user_id).order_by(Post.created_at.desc())
+    stmt = (
+        select(Post).options(selectinload(Post.author)).where(Post.user_id == user_id).order_by(Post.created_at.desc())
+    )
     result = await session.execute(stmt)
     return result.scalars().unique().all()
 
 
-async def create_post(session: AsyncSession, post: PostCreate) -> Post:
-    new_post = Post(**post.model_dump())
+async def create_post(session: AsyncSession, post: PostCreate, user_id: int) -> Post:
+    new_post = Post(**post.model_dump(), user_id=user_id)
     session.add(new_post)
     await session.commit()
     await session.refresh(new_post, attribute_names=["author"])
@@ -47,9 +51,6 @@ async def update_post(session: AsyncSession, post_id: int, post: PostUpdate) -> 
     return None
 
 
-async def delete_post(session: AsyncSession, post_id: int) -> None:
-    existing_post = await get_post_by_id(session, post_id)
-    if not existing_post:
-        raise ValueError("Post not found")
+async def delete_post(session: AsyncSession, existing_post: Post) -> None:
     await session.delete(existing_post)
     await session.commit()

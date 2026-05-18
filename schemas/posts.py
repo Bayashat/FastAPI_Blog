@@ -8,8 +8,6 @@ from schemas.users import UserPublic
 class PostBase(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     content: str = Field(min_length=1)
-    user_id: int
-
 
 class PostCreate(PostBase):
     pass

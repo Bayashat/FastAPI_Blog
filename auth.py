@@ -1,11 +1,14 @@
 from datetime import UTC, datetime, timedelta
+from typing import Annotated
 
 import jwt
+from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
-from sqlalchemy.sql.operators import op
 
 from config import settings
+from dependencies import SessionDep
+from models import User
 
 password_hash = PasswordHash.recommended()
 
@@ -30,7 +33,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
             minutes=settings.access_token_expire_minutes,
         )
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(payload=to_encode, key=settings.secret_key.get_secret_value(), algorithm=settings.algorithm)
+    encoded_jwt = jwt.encode(
+        payload=to_encode, key=settings.secret_key.get_secret_value(), algorithm=settings.algorithm
+    )
     return encoded_jwt
 
 
@@ -47,3 +52,32 @@ def verify_access_token(token: str) -> str | None:
         return None
     else:
         return payload.get("sub")
+
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: SessionDep) -> User:
+    user_id = verify_access_token(token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    user = await session.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
+
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
