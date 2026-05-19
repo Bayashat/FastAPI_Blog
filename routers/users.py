@@ -1,16 +1,23 @@
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, UploadFile, status
 from fastapi.security import OAuth2PasswordRequestForm
+from PIL import UnidentifiedImageError
+from starlette.concurrency import run_in_threadpool
 
 from auth import CurrentUser, create_access_token, verify_password
 from config import settings
 from dependencies import SessionDep
+from image_utils import delete_profile_image, process_profile_image
 from models import User
-from schemas.posts import PostResponse
+from schemas.posts import PaginatedPostsResponse, PostResponse
 from schemas.users import Token, UserCreate, UserPrivate, UserPublic, UserUpdate
-from services.posts import get_posts_by_user_id
+from services.posts import (
+    get_all_posts_count,
+    get_all_posts_count_by_user_id,
+    get_posts_by_user_id,
+)
 from services.users import create_user as create_user_service
 from services.users import delete_user as delete_user_service
 from services.users import (
@@ -97,13 +104,29 @@ async def update_user(
     return updated_user
 
 
-@router.get("/{user_id}/posts", response_model=list[PostResponse])
-async def get_user_posts(user_id: int, session: SessionDep):
+@router.get("/{user_id}/posts", response_model=PaginatedPostsResponse)
+async def get_user_posts(
+    user_id: int,
+    session: SessionDep,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
+):
     existing_user = await get_user_by_id(session, user_id)
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    posts = await get_posts_by_user_id(session, user_id)
-    return posts
+
+    total_count = await get_all_posts_count_by_user_id(session, user_id)
+    user_posts = await get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
+
+    has_more = skip + len(user_posts) < total_count
+
+    return PaginatedPostsResponse(
+        posts=[PostResponse.model_validate(post) for post in user_posts],
+        total=total_count,
+        skip=skip,
+        limit=limit,
+        has_more=has_more,
+    )
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -113,4 +136,78 @@ async def delete_user(session: SessionDep, user: CurrentUser, user_id: int):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this user",
         )
+    old_file_name = user.image_file
+    if old_file_name:
+        delete_profile_image(old_file_name)
+
     await delete_user_service(session, user)
+
+
+@router.patch("/{user_id}/picture", response_model=UserPrivate)
+async def upload_profile_picture(
+    user_id: int,
+    session: SessionDep,
+    user: CurrentUser,
+    file: UploadFile,
+):
+    if user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user's picture",
+        )
+
+    content = await file.read()
+
+    if len(content) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File too large. Maximum size is {settings.max_upload_size_bytes // (1024 * 1024)}MB",
+        )
+
+    try:
+        new_file_name = await run_in_threadpool(process_profile_image, content)
+    except UnidentifiedImageError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image file. Please upload a valid image (JPEG, PNG, GIF, WebP).",
+        ) from err
+
+    old_file_name = user.image_file
+
+    user.image_file = new_file_name
+    await session.commit()
+    await session.refresh(user)
+
+    if old_file_name:
+        delete_profile_image(old_file_name)
+
+    return user
+
+
+@router.delete("/{user_id}/picture", response_model=UserPrivate)
+async def delete_user_picture(
+    user_id: int,
+    session: SessionDep,
+    user: CurrentUser,
+):
+    if user.id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this user's picture",
+        )
+
+    old_file_name = user.image_file
+
+    if not old_file_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No profile picture to delete",
+        )
+
+    user.image_file = None
+    await session.commit()
+    await session.refresh(user)
+
+    delete_profile_image(old_file_name)
+
+    return user

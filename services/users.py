@@ -2,7 +2,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth import hash_password
-from models import User
+from models import Post, User
 from schemas.users import UserCreate, UserUpdate
 
 

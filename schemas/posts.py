@@ -9,6 +9,7 @@ class PostBase(BaseModel):
     title: str = Field(min_length=1, max_length=100)
     content: str = Field(min_length=1)
 
+
 class PostCreate(PostBase):
     pass
 
@@ -26,3 +27,11 @@ class PostResponse(PostBase):
     created_at: datetime
 
     author: UserPublic
+
+
+class PaginatedPostsResponse(BaseModel):
+    posts: list[PostResponse]
+    total: int
+    skip: int
+    limit: int
+    has_more: bool

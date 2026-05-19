@@ -1,8 +1,6 @@
 """Read-side post access shared by API routes and HTML routes."""
 
-from turtle import title
-
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -10,10 +8,18 @@ from models import Post
 from schemas.posts import PostCreate, PostUpdate
 
 
-async def list_posts_ordered(session: AsyncSession) -> list[Post]:
-    stmt = select(Post).options(selectinload(Post.author)).order_by(Post.created_at.desc())
+async def list_posts_ordered(session: AsyncSession, skip: int = 0, limit: int = 10) -> list[Post]:
+    stmt = (
+        select(Post)
+        .options(selectinload(Post.author))
+        .order_by(
+            Post.created_at.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
+    )
     result = await session.execute(stmt)
-    return result.scalars().unique().all()
+    return result.scalars().all()
 
 
 async def get_post_by_id(session: AsyncSession, post_id: int) -> Post | None:
@@ -22,12 +28,24 @@ async def get_post_by_id(session: AsyncSession, post_id: int) -> Post | None:
     return result.scalar_one_or_none()
 
 
-async def get_posts_by_user_id(session: AsyncSession, user_id: int) -> list[Post]:
+async def get_posts_by_user_id(
+    session: AsyncSession,
+    user_id: int,
+    skip: int = 0,
+    limit: int = 10,
+) -> list[Post]:
     stmt = (
-        select(Post).options(selectinload(Post.author)).where(Post.user_id == user_id).order_by(Post.created_at.desc())
+        select(Post)
+        .options(selectinload(Post.author))
+        .where(Post.user_id == user_id)
+        .order_by(
+            Post.created_at.desc(),
+        )
+        .offset(skip)
+        .limit(limit)
     )
     result = await session.execute(stmt)
-    return result.scalars().unique().all()
+    return result.scalars().all()
 
 
 async def create_post(session: AsyncSession, post: PostCreate, user_id: int) -> Post:
@@ -54,3 +72,13 @@ async def update_post(session: AsyncSession, post_id: int, post: PostUpdate) -> 
 async def delete_post(session: AsyncSession, existing_post: Post) -> None:
     await session.delete(existing_post)
     await session.commit()
+
+
+async def get_all_posts_count(session: AsyncSession) -> int:
+    count = await session.scalar(select(func.count(Post.id)))
+    return count or 0
+
+
+async def get_all_posts_count_by_user_id(session: AsyncSession, user_id: int) -> int:
+    count = await session.scalar(select(func.count(Post.id)).where(Post.user_id == user_id))
+    return count or 0

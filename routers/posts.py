@@ -1,19 +1,38 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.util import HasMemoized
 
 from auth import CurrentUser
 from dependencies import SessionDep
-from schemas.posts import PostCreate, PostResponse, PostUpdate
+from models import Post
+from schemas.posts import PaginatedPostsResponse, PostCreate, PostResponse, PostUpdate
 from services.posts import create_post as create_post_service
 from services.posts import delete_post as delete_post_service
-from services.posts import get_post_by_id, list_posts_ordered
+from services.posts import get_all_posts_count, get_post_by_id, list_posts_ordered
 from services.posts import update_post as update_post_service
 
 router = APIRouter(prefix="/api/posts")
 
 
-@router.get("", response_model=list[PostResponse])
-async def get_posts(session: SessionDep):
-    return await list_posts_ordered(session)
+@router.get("", response_model=PaginatedPostsResponse)
+async def get_posts(
+    session: SessionDep,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
+):
+    total_count = await get_all_posts_count(session)
+    posts: list[Post] = await list_posts_ordered(session, skip, limit)
+
+    has_more = skip + len(posts) < total_count
+
+    return PaginatedPostsResponse(
+        posts=[PostResponse.model_validate(post) for post in posts],
+        total=total_count,
+        skip=skip,
+        limit=limit,
+        has_more=has_more,
+    )
 
 
 @router.get("/{post_id}", response_model=PostResponse)
