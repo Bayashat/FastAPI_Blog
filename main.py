@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 
+from aiosmtplib import response
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exception_handlers import (
     http_exception_handler,
@@ -53,9 +54,27 @@ async def register_page(request: Request):
 
 
 @app.get("/account", include_in_schema=False, name="account")
-async def register_page(request: Request):
+async def account_page(request: Request):
     return templates.TemplateResponse(request, "account.html", {"title": "Account"})
 
+
+@app.get("/forgot-password", include_in_schema=False)
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse(
+        request,
+        "forgot_password.html",
+        {"title": "Forgot Password"},
+    )
+
+@app.get("/reset-password", include_in_schema=False)
+async def reset_password_page(request: Request):
+    response = templates.TemplateResponse(
+        request,
+        "reset_password.html",
+        {"title": "Reset Password"},
+    )
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 # ---------------- Exception handlers ------------------
 

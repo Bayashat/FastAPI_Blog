@@ -10,10 +10,10 @@ if str(PROJECT_ROOT) not in sys.path:
 import httpx
 from sqlalchemy import delete, select, update
 
-from database import AsyncSessionLocal, async_engine
+from database import AsyncSessionLocal, Base, async_engine
 from image_utils import PROFILE_PICS_DIR
 from main import app
-from models import Post, User
+from models import PasswordResetToken, Post, User
 
 POPULATE_IMAGES_DIR = Path("populate_images")
 
@@ -238,6 +238,11 @@ POST_44 = {
 }
 
 
+async def ensure_tables() -> None:
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
 async def clear_existing_data() -> None:
     # Delete profile pictures from local storage
     if PROFILE_PICS_DIR.exists():
@@ -248,6 +253,7 @@ async def clear_existing_data() -> None:
 
     # Clear database tables (order respects foreign keys)
     async with AsyncSessionLocal() as db:
+        await db.execute(delete(PasswordResetToken))
         await db.execute(delete(Post))
         await db.execute(delete(User))
         await db.commit()
@@ -283,6 +289,8 @@ async def update_post_dates() -> None:
 
 
 async def populate() -> None:
+    await ensure_tables()
+
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(

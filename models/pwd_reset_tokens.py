@@ -12,13 +12,13 @@ if TYPE_CHECKING:
     from models.users import User
 
 
-class Post(Base):
-    __tablename__ = "posts"
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(100))
-    content: Mapped[str] = mapped_column(Text)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    author: Mapped[User] = relationship(back_populates="posts")
+    user: Mapped[User] = relationship(back_populates="reset_tokens")

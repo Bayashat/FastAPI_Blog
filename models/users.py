@@ -9,6 +9,7 @@ from database import Base
 
 if TYPE_CHECKING:
     from models.posts import Post
+    from models.pwd_reset_tokens import PasswordResetToken
 
 
 class User(Base):
@@ -21,6 +22,7 @@ class User(Base):
     image_file: Mapped[str | None] = mapped_column(String(120), default=None)
 
     posts: Mapped[list[Post]] = relationship(back_populates="author", cascade="all, delete-orphan")
+    reset_tokens: Mapped[list[PasswordResetToken]] = relationship(back_populates="user", cascade="all, delete-orphan")
 
     @property
     def image_path(self) -> str:

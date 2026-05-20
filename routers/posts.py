@@ -68,7 +68,7 @@ async def update_post(
     return updated_post
 
 
-@router.put("/{user_id}", response_model=PostResponse)
+@router.put("/{post_id}", response_model=PostResponse)
 async def update_post_full(
     post_id: int,
     session: SessionDep,
