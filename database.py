@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
+from config import settings
+
 # SQLALCHEMY_SYNC_DATABASE_URL = "sqlite:///./blog.db"
 
 # sync_engine = create_engine(SQLALCHEMY_SYNC_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -11,9 +13,13 @@ from sqlalchemy.orm import DeclarativeBase
 #         yield session
 
 
-SQLALCHEMY_ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./blog.db"
+# For Async + SQLite
+# SQLALCHEMY_ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./blog.db"
 
-async_engine = create_async_engine(SQLALCHEMY_ASYNC_DATABASE_URL, connect_args={"check_same_thread": False})
+async_engine = create_async_engine(
+    settings.database_url
+    # connect_args={"check_same_thread": False},  # needed for SQLite
+)
 AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
 

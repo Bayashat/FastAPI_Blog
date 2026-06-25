@@ -103,7 +103,7 @@
         <div class="mb-4">
             <h5 class="text-danger">Danger Zone</h5>
             <p class="text-body-secondary">
-                Once you delete your account, there is no going back. All your posts will also be deleted.
+                Once you delete your account, there is no going back. Your posts will remain, but they will no longer show an author.
             </p>
             <button type="button"
                     class="btn btn-outline-danger"
@@ -128,7 +128,7 @@
                 </div>
                 <div class="modal-body">
                     <p class="fs-5">
-                        Are you sure you want to delete your account? This action cannot be undone. All your posts will be permanently deleted.
+                        Are you sure you want to delete your account? This action cannot be undone. Your posts will remain without an author.
                     </p>
                 </div>
                 <div class="modal-footer">
@@ -222,7 +222,7 @@
             uploadBtn.textContent = 'Uploading...';
 
             try {
-                const response = await fetch(`/api/users/${currentUserId}/picture`, {
+                const response = await fetch('/api/users/me/picture', {
                     method: 'PATCH',
                     headers: {
                         // Don't set Content-Type — browser sets multipart boundary automatically 
@@ -286,7 +286,7 @@
             const userData = Object.fromEntries(formData.entries());
 
             try {
-                const response = await fetch(`/api/users/${currentUserId}`, {
+                const response = await fetch('/api/users/me', {
                     method: 'PATCH',
                     headers: {
                         'Content-Type': 'application/json',
@@ -344,7 +344,7 @@
             }
 
             try {
-                const response = await fetch(`/api/users/${currentUserId}`, {
+                const response = await fetch('/api/users/me', {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Bearer ${token}`,

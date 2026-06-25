@@ -330,7 +330,7 @@ async def populate() -> None:
                 image_path = POPULATE_IMAGES_DIR / image_name
                 if image_path.exists():
                     response = await client.patch(
-                        f"/api/users/{user['id']}/picture",
+                        "/api/users/me/picture",
                         files={
                             "file": (
                                 image_name,

@@ -1,19 +1,21 @@
 from contextlib import asynccontextmanager
+import uuid
 
-from aiosmtplib import response
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exception_handlers import (
     http_exception_handler,
     request_validation_exception_handler,
 )
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from config import settings
-from database import Base, async_engine
+from database import async_engine
 from dependencies import SessionDep
+from middleware import RequestBodySizeLimitMiddleware
 from models import Post
 from routers import posts, users
 from services import posts as posts_service
@@ -23,14 +25,30 @@ from services import users as users_service
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # startup
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+
+    # For SQLite:
+    # async with async_engine.begin() as conn:
+    #     await conn.run_sync(Base.metadata.create_all)
+
     yield
     # shutdown
     await async_engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    RequestBodySizeLimitMiddleware,
+    max_body_size=settings.max_upload_size_bytes + 1024 * 1024,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://ui.cryptids.com"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/media", StaticFiles(directory="media"), name="media")
@@ -66,6 +84,7 @@ async def forgot_password_page(request: Request):
         {"title": "Forgot Password"},
     )
 
+
 @app.get("/reset-password", include_in_schema=False)
 async def reset_password_page(request: Request):
     response = templates.TemplateResponse(
@@ -75,6 +94,7 @@ async def reset_password_page(request: Request):
     )
     response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
 
 # ---------------- Exception handlers ------------------
 
@@ -132,7 +152,7 @@ async def home(request: Request, session: SessionDep):
 
 
 @app.get("/posts/{post_id}", include_in_schema=False, name="post")
-async def post_page(post_id: int, request: Request, session: SessionDep):
+async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep):
     post = await posts_service.get_post_by_id(session, post_id)
     if post:
         return templates.TemplateResponse(request, "post.html", {"post": post, "title": post.title})
@@ -140,22 +160,21 @@ async def post_page(post_id: int, request: Request, session: SessionDep):
 
 
 @app.get("/users/{user_id}/posts", include_in_schema=False, name="user_posts")
-async def user_posts_page(request: Request, user_id: int, session: SessionDep):
+async def user_posts_page(request: Request, user_id: uuid.UUID, session: SessionDep):
     user = await users_service.get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    total_count = await posts_service.get_all_posts_count_by_user_id(session, user_id)
+    total_count = await posts_service.count_posts_by_user_id(session, user_id)
     user_posts = await posts_service.get_posts_by_user_id(session, user_id, limit=settings.posts_per_page)
 
     has_more = len(user_posts) < total_count
 
-    result = await posts_service.get_posts_by_user_id(session, user_id)
     return templates.TemplateResponse(
         request,
         "user_posts.html",
         {
-            "posts": result,
+            "posts": user_posts,
             "user": user,
             "title": f"{user.username}'s Posts",
             "limit": settings.posts_per_page,

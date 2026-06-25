@@ -3,15 +3,19 @@
     <article class="content-section py-3 px-4 mb-4">
         <div class="d-flex align-items-start gap-4">
             <img class="rounded-circle article-img flex-shrink-0"
-                 src="{{ post.author.image_path }}"
-                 alt="{{ post.author.username }}'s profile picture"
+                 src="{{ post.author.image_path if post.author else '/static/profile_pics/default.jpg' }}"
+                 alt="{{ post.author.username if post.author else 'Deleted user' }}'s profile picture"
                  width="64"
                  height="64"
                  loading="lazy">
             <div class="flex-grow-1">
                 <div class="article-metadata mb-2">
-                    <a class="me-2"
-                       href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
+                    {% if post.author %}
+                        <a class="me-2"
+                           href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
+                    {% else %}
+                        <span class="me-2 text-body-secondary">Deleted user</span>
+                    {% endif %}
                     <small class="text-body-secondary">{{ post.created_at.strftime("%B %d, %Y") }}</small>
                 </div>
                 <h2 class="article-title">{{ post.title }}</h2>
@@ -115,8 +119,8 @@
             hideModal
         } from '/static/js/utils.js';
 
-        const postId = {{ post.id }};
-        const postUserId = {{ post.user_id }};
+        const postId = {{ post.id|string|tojson }};
+        const postUserId = {% if post.user_id %}{{ post.user_id|string|tojson }}{% else %}null{% endif %};
 
         // Show edit/delete buttons only if current user owns this post
         async function checkOwnership() {

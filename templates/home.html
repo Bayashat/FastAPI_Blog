@@ -5,15 +5,19 @@
             <article class="content-section py-3 px-4 mb-4">
                 <div class="d-flex align-items-start gap-4">
                     <img class="rounded-circle article-img flex-shrink-0"
-                         src="{{ post.author.image_path }}"
-                         alt="{{ post.author.username }}'s profile picture"
+                         src="{{ post.author.image_path if post.author else '/static/profile_pics/default.jpg' }}"
+                         alt="{{ post.author.username if post.author else 'Deleted user' }}'s profile picture"
                          width="64"
                          height="64"
                          loading="lazy">
                     <div class="flex-grow-1">
                         <div class="article-metadata mb-2">
-                            <a class="me-2"
-                               href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
+                            {% if post.author %}
+                                <a class="me-2"
+                                   href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
+                            {% else %}
+                                <span class="me-2 text-body-secondary">Deleted user</span>
+                            {% endif %}
                             <small class="text-body-secondary">{{ post.created_at.strftime("%B %d, %Y") }}</small>
                         </div>
                         <h2>
@@ -49,13 +53,20 @@
 
         // Create HTML for a single post (matching server-rendered structure)
         function createPostHTML(post) {
+            const author = post.author;
+            const authorName = author ? author.username : 'Deleted user';
+            const authorImagePath = author ? author.image_path : '/static/profile_pics/default.jpg';
+            const authorHtml = author
+                ? `<a class="me-2" href="/users/${author.id}/posts">${escapeHtml(author.username)}</a>`
+                : '<span class="me-2 text-body-secondary">Deleted user</span>';
+
             return `
       <article class="content-section py-3 px-4 mb-4">
         <div class="d-flex align-items-start gap-4">
-          <img class="rounded-circle article-img flex-shrink-0" src="${escapeHtml(post.author.image_path)}" alt="${escapeHtml(post.author.username)}'s profile picture" width="64" height="64" loading="lazy">
+          <img class="rounded-circle article-img flex-shrink-0" src="${escapeHtml(authorImagePath)}" alt="${escapeHtml(authorName)}'s profile picture" width="64" height="64" loading="lazy">
           <div class="flex-grow-1">
             <div class="article-metadata mb-2">
-              <a class="me-2" href="/users/${post.author.id}/posts">${escapeHtml(post.author.username)}</a>
+              ${authorHtml}
               <small class="text-body-secondary">${formatDate(post.created_at)}</small>
             </div>
             <h2>

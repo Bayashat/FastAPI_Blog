@@ -1,15 +1,17 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
+
+from schemas.common import EmailString, PasswordString
 
 
 class ForgotPasswordRequest(BaseModel):
-    email: EmailStr = Field(max_length=120)
+    email: EmailString
 
 
 class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str = Field(min_length=8)
+    token: str = Field(min_length=32, max_length=256)
+    new_password: PasswordString
 
 
 class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str = Field(min_length=8)
+    current_password: PasswordString
+    new_password: PasswordString

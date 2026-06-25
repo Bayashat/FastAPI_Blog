@@ -1,35 +1,31 @@
-from sqlalchemy import delete, func, or_, select
+import uuid
+from datetime import datetime
+
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth import hash_password
-from models import Post, User
 from models.pwd_reset_tokens import PasswordResetToken
-from schemas.users import UserCreate, UserUpdate
 
 
-async def get_user_by_id(session: AsyncSession, user_id: int) -> User | None:
-    result = await session.get(User, user_id)
-    return result
-
-
-async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
-    stmt = select(User).where(func.lower(User.username) == username.lower())
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
-    stmt = select(User).where(User.email == email.lower())
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
-
-
-async def delete_existing_tokens(session: AsyncSession, user_id: int):
+async def delete_existing_tokens(session: AsyncSession, user_id: uuid.UUID) -> None:
     stmt = delete(PasswordResetToken).where(PasswordResetToken.user_id == user_id)
     await session.execute(stmt)
 
 
-async def get_reset_token_by_hash(session: AsyncSession, token_hash: str):
+async def create_reset_token(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    token_hash: str,
+    expires_at: datetime,
+) -> PasswordResetToken:
+    await delete_existing_tokens(session, user_id)
+    reset_token = PasswordResetToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
+    session.add(reset_token)
+    await session.commit()
+    return reset_token
+
+
+async def get_reset_token_by_hash(session: AsyncSession, token_hash: str) -> PasswordResetToken | None:
     stmt = select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()

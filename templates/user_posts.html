@@ -6,20 +6,20 @@
             <article class="content-section py-3 px-4 mb-4">
                 <div class="d-flex align-items-start gap-4">
                     <img class="rounded-circle article-img flex-shrink-0"
-                         src="{{ post.author.image_path }}"
-                         alt="{{ post.author.username }}'s profile picture"
+                         src="{{ user.image_path }}"
+                         alt="{{ user.username }}'s profile picture"
                          width="64"
                          height="64"
                          loading="lazy">
                     <div class="flex-grow-1">
                         <div class="article-metadata mb-2">
                             <a class="me-2"
-                               href="{{ url_for('user_posts', user_id=post.author.id) }}">{{ post.author.username }}</a>
-                            <small class="text-body-secondary">{{ post.date_posted.strftime("%B %d, %Y") }}</small>
+                               href="{{ url_for('user_posts', user_id=user.id) }}">{{ user.username }}</a>
+                            <small class="text-body-secondary">{{ post.created_at.strftime("%B %d, %Y") }}</small>
                         </div>
                         <h2>
                             <a class="article-title"
-                               href="{{ url_for('post_page', post_id=post.id) }}">{{ post.title }}</a>
+                               href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a>
                         </h2>
                         <p class="article-content">{{ post.content }}</p>
                     </div>
@@ -42,7 +42,12 @@
             formatDate
         } from '/static/js/utils.js';
 
-        const userId = {{ user.id }};
+        const pageUser = {
+            id: {{ user.id|string|tojson }},
+            username: {{ user.username|tojson }},
+            imagePath: {{ user.image_path|tojson }},
+        };
+        const userId = pageUser.id;
         let currentOffset = {{ limit }};
         const limit = {{ limit }};
         let hasMore = {{ 'true' if has_more else 'false' }};
@@ -54,11 +59,11 @@
             return `
       <article class="content-section py-3 px-4 mb-4">
         <div class="d-flex align-items-start gap-4">
-          <img class="rounded-circle article-img flex-shrink-0" src="${escapeHtml(post.author.image_path)}" alt="${escapeHtml(post.author.username)}'s profile picture" width="64" height="64" loading="lazy">
+          <img class="rounded-circle article-img flex-shrink-0" src="${escapeHtml(pageUser.imagePath)}" alt="${escapeHtml(pageUser.username)}'s profile picture" width="64" height="64" loading="lazy">
           <div class="flex-grow-1">
             <div class="article-metadata mb-2">
-              <a class="me-2" href="/users/${post.author.id}/posts">${escapeHtml(post.author.username)}</a>
-              <small class="text-body-secondary">${formatDate(post.date_posted)}</small>
+              <a class="me-2" href="/users/${pageUser.id}/posts">${escapeHtml(pageUser.username)}</a>
+              <small class="text-body-secondary">${formatDate(post.created_at)}</small>
             </div>
             <h2>
               <a class="article-title" href="/posts/${post.id}">${escapeHtml(post.title)}</a>

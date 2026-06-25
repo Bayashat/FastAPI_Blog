@@ -1,7 +1,6 @@
 import uuid
 from io import BytesIO
 from pathlib import Path
-from pickletools import optimize
 
 from PIL import Image, ImageOps
 
