@@ -1,5 +1,4 @@
-import uuid
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -38,7 +37,9 @@ class UserCreate(UserBase):
     password: PlainPassword
 
 
-class UserUpdate(UserBase):
+class UserUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: Username | None = None
     email: EmailAddress | None = None
 
@@ -52,7 +53,7 @@ class UserUpdate(UserBase):
         return data
 
     @model_validator(mode="after")
-    def require_at_least_one_field(self):
+    def require_at_least_one_field(self) -> Self:
         if not self.model_fields_set:
             raise ValueError("At least one field must be provided")
         return self

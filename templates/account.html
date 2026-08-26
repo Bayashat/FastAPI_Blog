@@ -225,7 +225,7 @@
                 const response = await fetch('/api/users/me/picture', {
                     method: 'PATCH',
                     headers: {
-                        // Don't set Content-Type — browser sets multipart boundary automatically 
+                        // Don't set Content-Type — browser sets multipart boundary automatically
                         'Authorization': `Bearer ${token}`,
                     },
                     body: formData,

@@ -1,8 +1,12 @@
+# ruff: noqa: E402
+
 import asyncio
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+# Keep project imports below this path bootstrap so the script also works when
+# executed directly as `python local/scripts/populate_db.py`.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))

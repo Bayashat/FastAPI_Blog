@@ -28,4 +28,6 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:8000"
 
 
-settings = Settings()
+# BaseSettings supplies these required values from environment sources at runtime,
+# which mypy cannot infer without a compatible Pydantic plugin.
+settings = Settings()  # type: ignore[call-arg]

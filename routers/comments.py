@@ -1,6 +1,7 @@
+from collections.abc import Sequence
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 
 from auth import CurrentUser
 from dependencies import SessionDep
@@ -24,16 +25,18 @@ async def list_post_comments(
     filter_query: Annotated[CommentListParams, Query()],
 ) -> ListCommentsResponse:
     total_count = await comment_service.count_comments(session, post_id)
-    comments: list[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
+    comments: Sequence[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
 
     has_more = filter_query.skip + len(comments) < total_count
 
-    return ListCommentsResponse(
-        comments=comments,
-        total=total_count,
-        skip=filter_query.skip,
-        limit=filter_query.limit,
-        has_more=has_more,
+    return ListCommentsResponse.model_validate(
+        {
+            "comments": comments,
+            "total": total_count,
+            "skip": filter_query.skip,
+            "limit": filter_query.limit,
+            "has_more": has_more,
+        }
     )
 
 

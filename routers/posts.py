@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -27,16 +28,18 @@ async def get_posts(
     query_params: Annotated[PostListParams, Query()],
 ) -> PaginatedPostsResponse:
     total_count = await post_service.count_posts(session, query_params)
-    posts: list[Post] = await post_service.list_posts(session, query_params)
+    posts: Sequence[Post] = await post_service.list_posts(session, query_params)
 
     has_more = query_params.skip + len(posts) < total_count
 
-    return PaginatedPostsResponse(
-        posts=posts,
-        total=total_count,
-        skip=query_params.skip,
-        limit=query_params.limit,
-        has_more=has_more,
+    return PaginatedPostsResponse.model_validate(
+        {
+            "posts": posts,
+            "total": total_count,
+            "skip": query_params.skip,
+            "limit": query_params.limit,
+            "has_more": has_more,
+        }
     )
 
 
@@ -110,7 +113,7 @@ async def delete_post(
     post_id: PostIdPathParam,
     session: SessionDep,
     user: CurrentUser,
-):
+) -> None:
     existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise HTTPException(

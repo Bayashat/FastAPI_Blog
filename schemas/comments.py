@@ -1,18 +1,12 @@
-import uuid
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Literal
 
-from fastapi import Path
 from pydantic import (
-    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
-    StringConstraints,
-    model_validator,
 )
 
-from schemas.common import UserId
 from schemas.users import UserPublic
 
 
@@ -31,7 +25,7 @@ class CommentResponse(BaseModel):
 
     content: str
     created_at: datetime
-    
+
     user: UserPublic | None
 
 

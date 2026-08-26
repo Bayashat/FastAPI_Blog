@@ -17,12 +17,8 @@ if TYPE_CHECKING:
 class Like(Base):
     __tablename__ = "likes"
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
-    )
-    post_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
-    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    post_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_likes_post_id", post_id),)

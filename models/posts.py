@@ -69,7 +69,7 @@ class Post(Base):
     )
 
     author: Mapped[User | None] = relationship(back_populates="posts")
-    # cascade="all, delete-orphan" 表示： 删除post时，相关对象也应该删除
+    # cascade="all, delete-orphan" 表示: 删除 post 时, 相关对象也应该删除
     # passive_deletes: Trust the DB's ON DELETE CASCADE, so SQLAlchemy does not load all children on post delete.
     likes: Mapped[list[Like]] = relationship(
         back_populates="post",

@@ -1,25 +1,23 @@
 """Read-side post access shared by API routes and HTML routes."""
 
-import uuid
-from typing import Any, TypeVar
+from collections.abc import Sequence
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload
 
-from models import Post
 from models.comments import Comment
 from models.users import User
 from schemas.comments import CommentCreateRequest, CommentListParams
 from schemas.common import UserId
-from schemas.posts import PostIdPathParam, PostListParams
+from schemas.posts import PostIdPathParam
 
 
 async def list_post_comments(
     session: AsyncSession,
     post_id: PostIdPathParam,
     filter_query: CommentListParams,
-) -> list[Comment]:
+) -> Sequence[Comment]:
     # for now, it's only created_at
     sort_column = Comment.created_at
 
@@ -49,10 +47,16 @@ async def list_post_comments(
     return (await session.scalars(stmt)).all()
 
 
-async def count_comments(session: AsyncSession, post_id: PostIdPathParam):
-    stmt = select(func.count()).select_from(Comment).where(Comment.post_id == post_id)
-    result = await session.execute(stmt)
-    return result.scalar()
+async def count_comments(session: AsyncSession, post_id: PostIdPathParam) -> int:
+    stmt = (
+        select(func.count())
+        .select_from(
+            Comment,
+        )
+        .where(Comment.post_id == post_id)
+    )
+
+    return (await session.execute(stmt)).scalar_one()
 
 
 async def create_comment(

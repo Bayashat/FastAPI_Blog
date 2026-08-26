@@ -5,16 +5,16 @@ Revises: 6ab965a8af94
 Create Date: 2026-06-27 01:05:54.871891
 
 """
-from typing import Sequence, Union
+
+from collections.abc import Sequence
 
 from alembic import op
 
-
 # revision identifiers, used by Alembic.
-revision: str = '11e0bae3a19e'
-down_revision: Union[str, Sequence[str], None] = '6ab965a8af94'
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+revision: str = "11e0bae3a19e"
+down_revision: str | Sequence[str] | None = "6ab965a8af94"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 CONSTRAINT_RENAMES: tuple[tuple[str, str, str], ...] = (

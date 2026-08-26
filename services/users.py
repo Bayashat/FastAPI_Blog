@@ -1,4 +1,5 @@
 import uuid
+from typing import cast
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +58,7 @@ async def username_or_email_exists(
         .exists()
     )
 
-    return await session.scalar(stmt)
+    return cast(bool, await session.scalar(stmt))
 
 
 async def create_user(

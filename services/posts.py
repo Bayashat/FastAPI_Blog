@@ -1,11 +1,11 @@
 """Read-side post access shared by API routes and HTML routes."""
 
-import uuid
-from typing import Any, TypeVar
+from collections.abc import Sequence
+from typing import Any
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload, with_expression
+from sqlalchemy.orm import joinedload, with_expression
 
 from models import Post
 from models.comments import Comment
@@ -20,8 +20,6 @@ from schemas.posts import (
     PostUpdatePatch,
     PostUpdatePut,
 )
-
-SelectRow = TypeVar("SelectRow", bound=tuple[Any, ...])
 
 POST_COMMENT_COUNT_EXPR = (
     select(func.count(Comment.id))
@@ -50,7 +48,7 @@ if set(POST_SORT_EXPRESSIONS) != set(PostSortField):
     raise RuntimeError("POST_SORT_EXPRESSIONS must define every PostSortField")
 
 
-def apply_post_filters(
+def apply_post_filters[SelectRow: tuple[Any, ...]](
     stmt: Select[SelectRow],
     filters: PostListParams,
 ) -> Select[SelectRow]:
@@ -72,7 +70,7 @@ def apply_post_filters(
 async def list_posts(
     session: AsyncSession,
     filter_query: PostListParams,
-) -> list[Post]:
+) -> Sequence[Post]:
     sort_expression = POST_SORT_EXPRESSIONS[filter_query.order_by]
 
     # basic select
@@ -140,7 +138,7 @@ async def get_posts_by_user_id(
     user_id: UserId,
     skip: int = 0,
     limit: int = 10,
-) -> list[Post]:
+) -> Sequence[Post]:
     stmt = (
         select(Post)
         .options(
@@ -189,7 +187,10 @@ async def update_post(
         setattr(existing_post, key, value)
 
     await session.commit()
+
     updated_post = await get_post_for_response(session, existing_post.id)
+    assert updated_post is not None
+
     return updated_post
 
 
@@ -201,11 +202,11 @@ async def delete_post(session: AsyncSession, existing_post: Post) -> None:
 async def count_posts(session: AsyncSession, filter_query: PostListParams) -> int:
     stmt = select(func.count()).select_from(Post)
     stmt = apply_post_filters(stmt, filter_query)
-    result = await session.execute(stmt)
-    return result.scalar()
+
+    return (await session.execute(stmt)).scalar_one()
 
 
 async def count_posts_by_user_id(session: AsyncSession, user_id: UserId) -> int:
     stmt = select(func.count()).select_from(Post).where(Post.user_id == user_id)
-    result = await session.execute(stmt)
-    return result.scalar()
+
+    return (await session.execute(stmt)).scalar_one()

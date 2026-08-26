@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sqlalchemy import delete, func, select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import Delete, delete, func, select
+from sqlalchemy.dialects.postgresql import Insert, insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +36,7 @@ async def set_post_like_state(
         if post_exists is None:
             raise PostNotFoundError
 
+        stmt: Insert | Delete
         if liked:
             stmt = (
                 insert(Like)
@@ -81,7 +82,7 @@ async def set_post_like_state(
 
         constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
 
-        # 防止检查完 Post 后，Post 又被其他事务删除的竞态条件。
+        # 防止检查完 Post 后, Post 又被其他事务删除的竞态条件。
         if constraint_name == "fk_likes_post_id_posts":
             raise PostNotFoundError from exc
 

@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -13,7 +14,6 @@ from fastapi import (
 )
 from fastapi.security import OAuth2PasswordRequestForm
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
@@ -76,7 +76,7 @@ def user_conflict_exception() -> HTTPException:
 
 
 async def delete_profile_image_safely(file_name: str | None) -> None:
-    if not file_name or file_name is None:
+    if not file_name:
         return
     try:
         await run_in_threadpool(delete_profile_image, file_name)
@@ -86,14 +86,23 @@ async def delete_profile_image_safely(file_name: str | None) -> None:
 
 @router.post("", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, session: SessionDep) -> User:
-    password_hash = await run_in_threadpool(hash_password, user.password)
+    password_hash = await run_in_threadpool(hash_password, user.password.get_secret_value())
 
     try:
         async with session.begin():
-            if await user_service.username_or_email_exists(session, user.username, user.email):
+            if await user_service.username_or_email_exists(
+                session,
+                user.username,
+                user.email,
+            ):
                 raise user_conflict_exception()
 
-            new_user = await user_service.create_user(session, user, password_hash)
+            new_user = await user_service.create_user(
+                session,
+                user,
+                password_hash,
+            )
+
     except IntegrityError as err:
         raise user_conflict_exception() from err
 
@@ -166,13 +175,12 @@ async def forgot_password(
     }
 
 
-
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
 async def reset_password(
     request_data: ResetPasswordRequest,
     session: SessionDep,
 ) -> dict:
-    token_hash = hash_reset_token(request_data.token)
+    token_hash = hash_reset_token(request_data.token.get_secret_value())
     now = datetime.now(UTC)
 
     reset_token = await pwd_reset_token_service.get_reset_token_by_hash(session, token_hash)
@@ -191,7 +199,7 @@ async def reset_password(
         await session.commit()
         raise invalid_reset_token_exception()
 
-    user.password_hash = await run_in_threadpool(hash_password, request_data.new_password)
+    user.password_hash = await run_in_threadpool(hash_password, request_data.new_password.get_secret_value())
     await pwd_reset_token_service.delete_existing_tokens(session, user.id)
     await session.commit()
 
@@ -210,8 +218,8 @@ async def change_password(
         await user_service.change_user_password(
             session,
             user,
-            password_data.current_password,
-            password_data.new_password,
+            password_data.current_password.get_secret_value(),
+            password_data.new_password.get_secret_value(),
         )
     except user_service.IncorrectCurrentPasswordError as err:
         raise HTTPException(
@@ -228,12 +236,18 @@ async def update_user(
     user_update: UserUpdate,
 ) -> User:
     # 检查是否有冲突的用户名或邮箱
-    if user_update.username is not None and user_update.username.lower() != current_user.username.lower():
-        if await user_service.get_user_by_username(session, user_update.username):
-            raise user_conflict_exception()
-    if user_update.email is not None and user_update.email.lower() != current_user.email.lower():
-        if await user_service.get_user_by_email(session, user_update.email):
-            raise user_conflict_exception()
+    if (
+        user_update.username is not None
+        and user_update.username.lower() != current_user.username.lower()
+        and await user_service.get_user_by_username(session, user_update.username)
+    ):
+        raise user_conflict_exception()
+    if (
+        user_update.email is not None
+        and user_update.email.lower() != current_user.email.lower()
+        and await user_service.get_user_by_email(session, user_update.email)
+    ):
+        raise user_conflict_exception()
 
     try:
         updated_user: User = await user_service.update_user(session, current_user, user_update)
@@ -244,7 +258,7 @@ async def update_user(
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(session: SessionDep, user: CurrentUser):
+async def delete_user(session: SessionDep, user: CurrentUser) -> None:
     old_file_name = await user_service.delete_user(session, user)
 
     await delete_profile_image_safely(old_file_name)
@@ -320,7 +334,7 @@ async def get_user_posts(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     total_count = await post_service.count_posts_by_user_id(session, user_id)
-    user_posts: list[Post] = await post_service.get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
+    user_posts: Sequence[Post] = await post_service.get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
 
     has_more = skip + len(user_posts) < total_count
 

@@ -80,7 +80,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
     try:
         user_uuid = uuid.UUID(user_id)
     except (TypeError, ValueError):
-        raise credentials_exception
+        raise credentials_exception from None
 
     user = await session.get(User, user_uuid)
     if not user:

@@ -25,4 +25,3 @@ class Comment(Base):
 
     user: Mapped[User | None] = relationship(back_populates="comments")
     post: Mapped[Post] = relationship(back_populates="comments")
- 

@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from enum import StrEnum
 
@@ -12,20 +13,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 from config import settings
 from database import async_engine
 from dependencies import SessionDep
 from middleware import RequestBodySizeLimitMiddleware
 from models import Post
-from routers import comments, posts, users, likes
-from schemas.posts import PostListParams
+from routers import comments, likes, posts, users
+from schemas.posts import PostListParams, PostSortField
 from services import posts as posts_service
 from services import users as users_service
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # startup
 
     # For SQLite:
@@ -73,22 +75,22 @@ app.include_router(likes.router, tags=[Tags.likes])
 
 
 @app.get("/login", include_in_schema=False, name="login")
-async def login_page(request: Request):
+async def login_page(request: Request) -> Response:
     return templates.TemplateResponse(request, "login.html", {"title": "Login"})
 
 
 @app.get("/register", include_in_schema=False, name="register")
-async def register_page(request: Request):
+async def register_page(request: Request) -> Response:
     return templates.TemplateResponse(request, "register.html", {"title": "Register"})
 
 
 @app.get("/account", include_in_schema=False, name="account")
-async def account_page(request: Request):
+async def account_page(request: Request) -> Response:
     return templates.TemplateResponse(request, "account.html", {"title": "Account"})
 
 
 @app.get("/forgot-password", include_in_schema=False)
-async def forgot_password_page(request: Request):
+async def forgot_password_page(request: Request) -> Response:
     return templates.TemplateResponse(
         request,
         "forgot_password.html",
@@ -97,7 +99,7 @@ async def forgot_password_page(request: Request):
 
 
 @app.get("/reset-password", include_in_schema=False)
-async def reset_password_page(request: Request):
+async def reset_password_page(request: Request) -> Response:
     response = templates.TemplateResponse(
         request,
         "reset_password.html",
@@ -111,7 +113,7 @@ async def reset_password_page(request: Request):
 
 
 @app.exception_handler(StarletteHTTPException)
-async def general_http_exception_handler(request: Request, exception: StarletteHTTPException):
+async def general_http_exception_handler(request: Request, exception: StarletteHTTPException) -> Response:
     if request.url.path.startswith("/api"):
         return await http_exception_handler(request, exception)
 
@@ -130,7 +132,7 @@ async def general_http_exception_handler(request: Request, exception: StarletteH
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exception: RequestValidationError):
+async def validation_exception_handler(request: Request, exception: RequestValidationError) -> Response:
     if request.url.path.startswith("/api"):
         return await request_validation_exception_handler(request, exception)
 
@@ -145,10 +147,12 @@ async def validation_exception_handler(request: Request, exception: RequestValid
 
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts")
-async def home(request: Request, session: SessionDep):
-    filter_query = PostListParams(limit=settings.posts_per_page, skip=0, order_by="created_at", order_direction="desc")
+async def home(request: Request, session: SessionDep) -> Response:
+    filter_query = PostListParams(
+        limit=settings.posts_per_page, skip=0, order_by=PostSortField.CREATED_AT, order_direction="desc"
+    )
     total_count = await posts_service.count_posts(session, filter_query)
-    posts: list[Post] = await posts_service.list_posts(session, filter_query)
+    posts: Sequence[Post] = await posts_service.list_posts(session, filter_query)
 
     has_more = len(posts) < total_count
     return templates.TemplateResponse(
@@ -164,7 +168,7 @@ async def home(request: Request, session: SessionDep):
 
 
 @app.get("/posts/{post_id}", include_in_schema=False, name="post")
-async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep):
+async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep) -> Response:
     post = await posts_service.get_post_for_response(session, post_id)
     if post:
         return templates.TemplateResponse(request, "post.html", {"post": post, "title": post.title})
@@ -172,7 +176,7 @@ async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep):
 
 
 @app.get("/users/{user_id}/posts", include_in_schema=False, name="user_posts")
-async def user_posts_page(request: Request, user_id: uuid.UUID, session: SessionDep):
+async def user_posts_page(request: Request, user_id: uuid.UUID, session: SessionDep) -> Response:
     user = await users_service.get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

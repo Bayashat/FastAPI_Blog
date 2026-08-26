@@ -36,25 +36,33 @@ class PostSortField(StrEnum):
 
 
 class PostListParams(BaseModel):
-    limit: int = Field(10, ge=1, le=100, description="Maximum number of elements to return")
-    skip: int = Field(0, ge=0, description="Number of elements to skip before starting to collect the result set")
-    order_by: PostSortField = Field(PostSortField.CREATED_AT, description="Field used to order posts")
+    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of elements to return")
+    skip: int = Field(
+        default=0,
+        ge=0,
+        description="Number of elements to skip before starting to collect the result set",
+    )
+    order_by: PostSortField = Field(default=PostSortField.CREATED_AT, description="Field used to order posts")
     order_direction: Literal["asc", "desc"] = Field(
-        "desc", description="Direction of ordering: ascending or descending"
+        default="desc", description="Direction of ordering: ascending or descending"
     )
 
-    author_id: uuid.UUID | None = Field(None, description="Filter posts by author ID")
+    author_id: uuid.UUID | None = Field(default=None, description="Filter posts by author ID")
     q: PostSearchParam | None = Field(
-        None,
+        default=None,
         description="Case-insensitive search in post title and content",
         examples=["fastapi"],
     )
 
     created_from: AwareDatetime | None = Field(
-        None, description="Filter posts created from this date, inclusive", examples=["2024-01-01T00:00:00Z"]
+        default=None,
+        description="Filter posts created from this date, inclusive",
+        examples=["2024-01-01T00:00:00Z"],
     )
     created_before: AwareDatetime | None = Field(
-        None, description="Filter posts created before this date, exclusive", examples=["2024-12-31T23:59:59Z"]
+        default=None,
+        description="Filter posts created before this date, exclusive",
+        examples=["2024-12-31T23:59:59Z"],
     )
 
     # tags: list[str] = []
@@ -93,7 +101,7 @@ class PostUpdatePut(PostBase):
     )
 
 
-class PostUpdatePatch(PostUpdatePut):
+class PostUpdatePatch(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
