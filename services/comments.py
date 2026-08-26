@@ -27,7 +27,7 @@ async def list_post_comments(
     stmt = (
         select(Comment)
         .options(
-            selectinload(Comment.user).load_only(
+            joinedload(Comment.user).load_only(
                 User.id,
                 User.username,
                 User.image_file,
@@ -45,14 +45,14 @@ async def list_post_comments(
         .offset(filter_query.skip)
         .limit(filter_query.limit)
     )
-    result = await session.execute(stmt)
-    return result.scalars().all()
+
+    return (await session.scalars(stmt)).all()
 
 
 async def count_comments(session: AsyncSession, post_id: PostIdPathParam):
     stmt = select(func.count()).select_from(Comment).where(Comment.post_id == post_id)
     result = await session.execute(stmt)
-    return result.scalar_one()
+    return result.scalar()
 
 
 async def create_comment(

@@ -12,9 +12,7 @@ from schemas.comments import (
     ListCommentsResponse,
 )
 from schemas.posts import PostIdPathParam
-from services.comments import count_comments
-from services.comments import create_comment as create_comment_service
-from services.comments import list_post_comments as list_post_comments_service
+from services import comments as comment_service
 
 router = APIRouter(prefix="/api/posts/{post_id}")
 
@@ -25,8 +23,8 @@ async def list_post_comments(
     post_id: PostIdPathParam,
     filter_query: Annotated[CommentListParams, Query()],
 ) -> ListCommentsResponse:
-    total_count = await count_comments(session, post_id)
-    comments: list[Comment] = await list_post_comments_service(session, post_id, filter_query)
+    total_count = await comment_service.count_comments(session, post_id)
+    comments: list[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
 
     has_more = filter_query.skip + len(comments) < total_count
 
@@ -46,5 +44,5 @@ async def add_post_comment(
     user: CurrentUser,
     comment: CommentCreateRequest,
 ) -> Comment:
-    new_comment = await create_comment_service(session, post_id, user.id, comment)
+    new_comment = await comment_service.create_comment(session, post_id, user.id, comment)
     return new_comment

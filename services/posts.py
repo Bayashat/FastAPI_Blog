@@ -77,7 +77,7 @@ async def list_posts(
 
     # basic select
     stmt = select(Post).options(
-        selectinload(Post.author).load_only(
+        joinedload(Post.author).load_only(
             User.id,
             User.username,
             User.image_file,
@@ -102,8 +102,8 @@ async def list_posts(
         .offset(filter_query.skip)
         .limit(filter_query.limit)
     )
-    result = await session.execute(stmt)
-    return result.scalars().all()
+
+    return (await session.scalars(stmt)).all()
 
 
 async def get_post_for_response(session: AsyncSession, post_id: PostId) -> Post | None:
@@ -155,15 +155,20 @@ async def get_posts_by_user_id(
         .offset(skip)
         .limit(limit)
     )
-    result = await session.execute(stmt)
-    return result.scalars().all()
+
+    return (await session.scalars(stmt)).all()
 
 
 async def create_post(session: AsyncSession, post_data: PostCreate, user_id: UserId) -> Post:
     post = Post(**post_data.model_dump(), user_id=user_id)
+
     session.add(post)
     await session.commit()
+
     new_post = await get_post_for_response(session, post.id)
+
+    assert new_post is not None
+
     return new_post
 
 

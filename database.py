@@ -20,8 +20,9 @@ from config import settings
 # SQLALCHEMY_ASYNC_DATABASE_URL = "sqlite+aiosqlite:///./blog.db"
 
 async_engine = create_async_engine(
-    settings.database_url
+    settings.database_url,
     # connect_args={"check_same_thread": False},  # needed for SQLite
+    echo=True,
 )
 AsyncSessionLocal = async_sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 

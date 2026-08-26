@@ -46,30 +46,9 @@ from schemas.users import (
     UserPublic,
     UserUpdate,
 )
-from services.posts import count_posts_by_user_id, get_posts_by_user_id
-from services.pwd_reset_token import (
-    create_reset_token,
-    delete_existing_tokens,
-    get_reset_token_by_hash,
-)
-from services.users import (
-    IncorrectCurrentPasswordError,
-    PasswordUnchangedError,
-    ProfileImageNotFoundError,
-    change_user_password,
-)
-from services.users import create_user as create_user_service
-from services.users import delete_user as delete_user_service
-from services.users import (
-    get_user_by_email,
-    get_user_by_id,
-    get_user_by_username,
-)
-from services.users import update_user as update_user_service
-from services.users import (
-    update_user_profile_image,
-    username_or_email_exists,
-)
+from services import posts as post_service
+from services import pwd_reset_token as pwd_reset_token_service
+from services import users as user_service
 
 router = APIRouter(prefix="/api/users")
 logger = logging.getLogger(__name__)
@@ -107,14 +86,17 @@ async def delete_profile_image_safely(file_name: str | None) -> None:
 
 @router.post("", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 async def create_user(user: UserCreate, session: SessionDep) -> User:
-    if await username_or_email_exists(session, user.username, user.email):
-        raise user_conflict_exception()
     password_hash = await run_in_threadpool(hash_password, user.password)
+
     try:
-        new_user = await create_user_service(session, user, password_hash)
+        async with session.begin():
+            if await user_service.username_or_email_exists(session, user.username, user.email):
+                raise user_conflict_exception()
+
+            new_user = await user_service.create_user(session, user, password_hash)
     except IntegrityError as err:
-        await session.rollback()
         raise user_conflict_exception() from err
+
     return new_user
 
 
@@ -123,7 +105,7 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep
 ) -> AccessTokenResponse:
     # Note: OAuth2PasswordRequestForm uses "username" field, but we treat it as email
-    user: User | None = await get_user_by_email(session, form_data.username.strip().lower())
+    user: User | None = await user_service.get_user_by_email(session, form_data.username.strip().lower())
 
     hash_to_verify = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
 
@@ -161,25 +143,28 @@ async def forgot_password(
     background_tasks: BackgroundTasks,
     session: SessionDep,
 ) -> dict:
-    user = await get_user_by_email(session, request_data.email)
-    if user:
-        token = generate_reset_token()
-        token_hash = hash_reset_token(token)
-        expires_at = datetime.now(UTC) + timedelta(
-            minutes=settings.reset_token_expire_minutes,
-        )
+    async with session.begin():
+        user = await user_service.get_user_by_email(session, request_data.email)
 
-        await create_reset_token(session, user.id, token_hash, expires_at)
-        background_tasks.add_task(
-            send_password_reset_email,
-            to_email=user.email,
-            username=user.username,
-            token=token,
-            expire_minutes=settings.reset_token_expire_minutes,
-        )
+        if user:
+            token = generate_reset_token()
+            token_hash = hash_reset_token(token)
+            expires_at = datetime.now(UTC) + timedelta(
+                minutes=settings.reset_token_expire_minutes,
+            )
+
+            await pwd_reset_token_service.create_reset_token(session, user.id, token_hash, expires_at)
+            background_tasks.add_task(
+                send_password_reset_email,
+                to_email=user.email,
+                username=user.username,
+                token=token,
+                expire_minutes=settings.reset_token_expire_minutes,
+            )
     return {
         "message": "If an account exists with this email, you will receive password reset instructions.",
     }
+
 
 
 @router.post("/reset-password", status_code=status.HTTP_200_OK)
@@ -190,7 +175,7 @@ async def reset_password(
     token_hash = hash_reset_token(request_data.token)
     now = datetime.now(UTC)
 
-    reset_token = await get_reset_token_by_hash(session, token_hash)
+    reset_token = await pwd_reset_token_service.get_reset_token_by_hash(session, token_hash)
     if not reset_token:
         raise invalid_reset_token_exception()
     # Check if the token has expired
@@ -199,7 +184,7 @@ async def reset_password(
         await session.commit()
         raise invalid_reset_token_exception()
 
-    user = await get_user_by_id(session, reset_token.user_id)
+    user = await user_service.get_user_by_id(session, reset_token.user_id)
     if not user:
         # delete reset_token if user doesn't exist
         await session.delete(reset_token)
@@ -207,7 +192,7 @@ async def reset_password(
         raise invalid_reset_token_exception()
 
     user.password_hash = await run_in_threadpool(hash_password, request_data.new_password)
-    await delete_existing_tokens(session, user.id)
+    await pwd_reset_token_service.delete_existing_tokens(session, user.id)
     await session.commit()
 
     return {
@@ -222,13 +207,13 @@ async def change_password(
     password_data: ChangePasswordRequest,
 ) -> dict:
     try:
-        await change_user_password(
+        await user_service.change_user_password(
             session,
             user,
             password_data.current_password,
             password_data.new_password,
         )
-    except IncorrectCurrentPasswordError as err:
+    except user_service.IncorrectCurrentPasswordError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
@@ -244,14 +229,14 @@ async def update_user(
 ) -> User:
     # 检查是否有冲突的用户名或邮箱
     if user_update.username is not None and user_update.username.lower() != current_user.username.lower():
-        if await get_user_by_username(session, user_update.username):
+        if await user_service.get_user_by_username(session, user_update.username):
             raise user_conflict_exception()
     if user_update.email is not None and user_update.email.lower() != current_user.email.lower():
-        if await get_user_by_email(session, user_update.email):
+        if await user_service.get_user_by_email(session, user_update.email):
             raise user_conflict_exception()
 
     try:
-        updated_user: User = await update_user_service(session, current_user, user_update)
+        updated_user: User = await user_service.update_user(session, current_user, user_update)
     except IntegrityError as err:
         await session.rollback()
         raise user_conflict_exception() from err
@@ -260,7 +245,7 @@ async def update_user(
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(session: SessionDep, user: CurrentUser):
-    old_file_name = await delete_user_service(session, user)
+    old_file_name = await user_service.delete_user(session, user)
 
     await delete_profile_image_safely(old_file_name)
 
@@ -291,7 +276,7 @@ async def upload_profile_picture(
             detail="Invalid image file. Please upload a valid image (JPEG, PNG, GIF, WebP).",
         ) from err
 
-    updated_user, old_file_name = await update_user_profile_image(
+    updated_user, old_file_name = await user_service.update_user_profile_image(
         session,
         user,
         new_file_name,
@@ -308,12 +293,12 @@ async def delete_user_picture(
     user: CurrentUser,
 ) -> User:
     try:
-        updated_user, old_file_name = await update_user_profile_image(
+        updated_user, old_file_name = await user_service.update_user_profile_image(
             session,
             user,
             None,
         )
-    except ProfileImageNotFoundError as err:
+    except user_service.ProfileImageNotFoundError as err:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No profile picture to delete",
@@ -330,12 +315,12 @@ async def get_user_posts(
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
 ) -> dict:
-    existing_user = await get_user_by_id(session, user_id)
+    existing_user = await user_service.get_user_by_id(session, user_id)
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    total_count = await count_posts_by_user_id(session, user_id)
-    user_posts: list[Post] = await get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
+    total_count = await post_service.count_posts_by_user_id(session, user_id)
+    user_posts: list[Post] = await post_service.get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
 
     has_more = skip + len(user_posts) < total_count
 
@@ -354,7 +339,7 @@ async def get_user(
     session: SessionDep,
     user_id: UserId,
 ) -> User:
-    user = await get_user_by_id(session, user_id)
+    user = await user_service.get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     return user

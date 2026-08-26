@@ -14,11 +14,7 @@ from schemas.posts import (
     PostUpdatePatch,
     PostUpdatePut,
 )
-from services.posts import count_posts
-from services.posts import create_post as create_post_service
-from services.posts import delete_post as delete_post_service
-from services.posts import get_post_for_response, get_post_for_write, list_posts
-from services.posts import update_post as update_post_service
+from services import posts as post_service
 
 router = APIRouter(prefix="/api/posts")
 
@@ -28,25 +24,25 @@ async def get_posts(
     session: SessionDep,
     # skip: Annotated[int, Query(ge=0)] = 0,
     # limit: Annotated[int, Query(ge=1, le=100)] = 10,
-    filter_query: Annotated[PostListParams, Query()],
+    query_params: Annotated[PostListParams, Query()],
 ) -> PaginatedPostsResponse:
-    total_count = await count_posts(session, filter_query)
-    posts: list[Post] = await list_posts(session, filter_query)
+    total_count = await post_service.count_posts(session, query_params)
+    posts: list[Post] = await post_service.list_posts(session, query_params)
 
-    has_more = filter_query.skip + len(posts) < total_count
+    has_more = query_params.skip + len(posts) < total_count
 
     return PaginatedPostsResponse(
         posts=posts,
         total=total_count,
-        skip=filter_query.skip,
-        limit=filter_query.limit,
+        skip=query_params.skip,
+        limit=query_params.limit,
         has_more=has_more,
     )
 
 
 @router.get("/{post_id}", response_model=PostResponse, status_code=status.HTTP_200_OK)
 async def get_post(post_id: PostIdPathParam, session: SessionDep) -> Post:
-    existing_post = await get_post_for_response(session, post_id)
+    existing_post = await post_service.get_post_for_response(session, post_id)
     if not existing_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -62,7 +58,7 @@ async def update_post_patch(
     user: CurrentUser,
     new_post_data: PostUpdatePatch,
 ) -> Post:
-    existing_post = await get_post_for_write(session, post_id)
+    existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -73,7 +69,7 @@ async def update_post_patch(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this post",
         )
-    updated_post = await update_post_service(session, new_post_data, existing_post)
+    updated_post = await post_service.update_post(session, new_post_data, existing_post)
     return updated_post
 
 
@@ -84,7 +80,7 @@ async def update_post_full(
     user: CurrentUser,
     post: PostUpdatePut,
 ) -> Post:
-    existing_post = await get_post_for_write(session, post_id)
+    existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,7 +91,7 @@ async def update_post_full(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this post",
         )
-    updated_post = await update_post_service(session, post, existing_post)
+    updated_post = await post_service.update_post(session, post, existing_post)
     return updated_post
 
 
@@ -105,7 +101,7 @@ async def create_post(
     session: SessionDep,
     user: CurrentUser,
 ) -> Post:
-    new_post = await create_post_service(session, post, user.id)
+    new_post = await post_service.create_post(session, post, user.id)
     return new_post
 
 
@@ -115,7 +111,7 @@ async def delete_post(
     session: SessionDep,
     user: CurrentUser,
 ):
-    existing_post = await get_post_for_write(session, post_id)
+    existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -126,4 +122,4 @@ async def delete_post(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this post",
         )
-    await delete_post_service(session, existing_post)
+    await post_service.delete_post(session, existing_post)

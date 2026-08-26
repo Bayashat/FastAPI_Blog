@@ -17,12 +17,10 @@ async def create_reset_token(
     user_id: uuid.UUID,
     token_hash: str,
     expires_at: datetime,
-) -> PasswordResetToken:
+) -> None:
     await delete_existing_tokens(session, user_id)
     reset_token = PasswordResetToken(user_id=user_id, token_hash=token_hash, expires_at=expires_at)
     session.add(reset_token)
-    await session.commit()
-    return reset_token
 
 
 async def get_reset_token_by_hash(session: AsyncSession, token_hash: str) -> PasswordResetToken | None:

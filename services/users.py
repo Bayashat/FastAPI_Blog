@@ -23,8 +23,7 @@ class ProfileImageNotFoundError(Exception):
 
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | None:
-    result = await session.get(User, user_id)
-    return result
+    return await session.get(User, user_id)
 
 
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
@@ -61,10 +60,14 @@ async def username_or_email_exists(
     return await session.scalar(stmt)
 
 
-async def create_user(session: AsyncSession, user: UserCreate, password_hash: str) -> User:
+async def create_user(
+    session: AsyncSession,
+    user: UserCreate,
+    password_hash: str,
+) -> User:
     new_user = User(username=user.username, email=user.email, password_hash=password_hash)
     session.add(new_user)
-    await session.commit()
+    await session.flush()
     return new_user
 
 
@@ -97,7 +100,6 @@ async def update_user(
         setattr(user, key, value)
 
     await session.commit()
-    await session.refresh(user)
     return user
 
 
@@ -116,7 +118,6 @@ async def update_user_profile_image(
 
     user.image_file = image_file
     await session.commit()
-    await session.refresh(user)
     return user, old_file_name
 
 
