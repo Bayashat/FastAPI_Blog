@@ -25,7 +25,7 @@ def process_profile_image(content: bytes) -> str:
     return filename
 
 
-def delete_profile_image(filename: str | None) -> None:
+def delete_profile_image(filename: str) -> None:
     if filename is None:
         return
 

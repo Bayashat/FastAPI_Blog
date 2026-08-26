@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Uuid, func
+from sqlalchemy import DateTime, ForeignKey, Index, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -24,6 +24,8 @@ class Like(Base):
         Uuid, ForeignKey("posts.id", ondelete="CASCADE"), primary_key=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_likes_post_id", post_id),)
 
     user: Mapped[User] = relationship(back_populates="likes")
     post: Mapped[Post] = relationship(back_populates="likes")

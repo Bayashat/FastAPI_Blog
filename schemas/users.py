@@ -1,25 +1,46 @@
 import uuid
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    SecretStr,
+    StringConstraints,
+    model_validator,
+)
 
-from schemas.common import EmailString, NormalizedString, PasswordString
+from schemas.common import UserId
+
+EmailAddress = Annotated[
+    EmailStr,
+    StringConstraints(strip_whitespace=True, to_lower=True, max_length=255),
+]
+Username = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
+]
+PlainPassword = Annotated[
+    SecretStr,
+    Field(min_length=8, max_length=256),
+]
 
 
 class UserBase(BaseModel):
-    username: NormalizedString
-    email: EmailString
+    model_config = ConfigDict(extra="forbid")
+
+    username: Username
+    email: EmailAddress
 
 
 class UserCreate(UserBase):
-    password: PasswordString
+    password: PlainPassword
 
 
-class UserUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    username: NormalizedString | None = None
-    email: EmailString | None = None
+class UserUpdate(UserBase):
+    username: Username | None = None
+    email: EmailAddress | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -37,19 +58,18 @@ class UserUpdate(BaseModel):
         return self
 
 
-class Token(BaseModel):
+class AccessTokenResponse(BaseModel):
     access_token: str
     token_type: Literal["bearer"]
 
 
 class UserPublic(BaseModel):
-    id: uuid.UUID
-    username: NormalizedString
-    image_file: str | None = None
+    id: UserId
+    username: Username
     image_path: str
 
     model_config = ConfigDict(from_attributes=True)
 
 
-class UserPrivate(UserPublic):
-    email: EmailString
+class CurrentUserResponse(UserPublic):
+    email: EmailAddress

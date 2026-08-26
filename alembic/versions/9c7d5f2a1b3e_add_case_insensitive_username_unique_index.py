@@ -23,7 +23,7 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     if bind.dialect.name == "postgresql":
-        op.drop_constraint("users_username_key", "users", type_="unique")
+        op.drop_constraint(op.f("uq_users_username"), "users", type_="unique")
 
     op.create_index(
         "uq_users_username_lower",
@@ -40,4 +40,4 @@ def downgrade() -> None:
     op.drop_index("uq_users_username_lower", table_name="users")
 
     if bind.dialect.name == "postgresql":
-        op.create_unique_constraint("users_username_key", "users", ["username"])
+        op.create_unique_constraint(op.f("uq_users_username"), "users", ["username"])

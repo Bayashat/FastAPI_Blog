@@ -1,13 +1,10 @@
+import uuid
 from typing import Annotated
 
-from pydantic import EmailStr, Field, StringConstraints
+from pydantic import Field
 
-EmailString = Annotated[
-    EmailStr,
-    StringConstraints(strip_whitespace=True, to_lower=True, max_length=255),
+# User specific types
+UserId = Annotated[
+    uuid.UUID,
+    Field(title="User ID", description="The unique identifier of the user"),
 ]
-NormalizedString = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
-]
-PasswordString = Annotated[str, Field(min_length=8, max_length=256)]

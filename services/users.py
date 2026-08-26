@@ -1,10 +1,25 @@
 import uuid
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
+from auth import hash_password, verify_password
 from models import User
 from schemas.users import UserCreate, UserUpdate
+from services.pwd_reset_token import delete_existing_tokens
+
+
+class IncorrectCurrentPasswordError(Exception):
+    """The supplied current password does not match the stored password."""
+
+
+class PasswordUnchangedError(Exception):
+    """The new password is the same as the current password."""
+
+
+class ProfileImageNotFoundError(Exception):
+    """The user has no custom profile image to remove."""
 
 
 async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | None:
@@ -24,46 +39,89 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def user_exists_by_username_or_email(
+async def username_or_email_exists(
     session: AsyncSession,
     username: str,
     email: str,
 ) -> bool:
+    normalized_username = username.strip().lower()
+    normalized_email = email.strip().lower()
+
     stmt = select(
-        exists().where(
+        select(User.id)
+        .where(
             or_(
-                func.lower(User.username) == username.lower(),
-                User.email == email.lower(),
+                func.lower(User.username) == normalized_username,
+                User.email == normalized_email,
             )
         )
+        .exists()
     )
-    return bool(await session.scalar(stmt))
+
+    return await session.scalar(stmt)
 
 
-# async def get_user_by_username_or_email(session: AsyncSession, username: str, email: str) -> User | None:
-#     stmt = select(User).where(or_(func.lower(User.username) == username.lower(), User.email == email.lower()))
-#     result = await session.execute(stmt)
-#     return result.scalar_one_or_none()
-
-
-async def create_user(session: AsyncSession, user: UserCreate) -> User:
-    new_user = User(username=user.username, email=user.email, password_hash=user.password)
+async def create_user(session: AsyncSession, user: UserCreate, password_hash: str) -> User:
+    new_user = User(username=user.username, email=user.email, password_hash=password_hash)
     session.add(new_user)
     await session.commit()
-    await session.refresh(new_user)
     return new_user
 
 
-async def update_user(session: AsyncSession, user: UserUpdate, current_user: User) -> User:
-    update_data = user.model_dump(exclude_unset=True)
-    for k, v in update_data.items():
-        setattr(current_user, k, v)
+async def change_user_password(
+    session: AsyncSession,
+    user: User,
+    current_password: str,
+    new_password: str,
+) -> None:
+    password_matches = await run_in_threadpool(
+        verify_password,
+        current_password,
+        user.password_hash,
+    )
+    if not password_matches:
+        raise IncorrectCurrentPasswordError
+
+    user.password_hash = await run_in_threadpool(hash_password, new_password)
+    await delete_existing_tokens(session, user.id)
+    await session.commit()
+
+
+async def update_user(
+    session: AsyncSession,
+    user: User,
+    user_update: UserUpdate,
+) -> User:
+    update_data = user_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(user, key, value)
 
     await session.commit()
-    await session.refresh(current_user)
-    return current_user
+    await session.refresh(user)
+    return user
 
 
-async def delete_user(session: AsyncSession, user: User) -> None:
+async def update_user_profile_image(
+    session: AsyncSession,
+    user: User,
+    image_file: str | None,
+) -> tuple[User, str | None]:
+    old_file_name = user.image_file
+    # 1. Old: None, New: "new.jpg" -> First time upload, ok.
+    # 2. Old: "old.jpg", New: "new.jpg" -> Update, ok.
+    # 3. Old: "old.jpg", New: None -> Delete, ok.
+    # 4. Old: None, New: None -> Error, user has no image
+    if old_file_name is None and image_file is None:
+        raise ProfileImageNotFoundError
+
+    user.image_file = image_file
+    await session.commit()
+    await session.refresh(user)
+    return user, old_file_name
+
+
+async def delete_user(session: AsyncSession, user: User) -> str | None:
+    old_file_name = user.image_file
     await session.delete(user)
     await session.commit()
+    return old_file_name

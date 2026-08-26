@@ -1,5 +1,6 @@
-from contextlib import asynccontextmanager
 import uuid
+from contextlib import asynccontextmanager
+from enum import StrEnum
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exception_handlers import (
@@ -17,7 +18,8 @@ from database import async_engine
 from dependencies import SessionDep
 from middleware import RequestBodySizeLimitMiddleware
 from models import Post
-from routers import posts, users
+from routers import comments, posts, users, likes
+from schemas.posts import PostListParams
 from services import posts as posts_service
 from services import users as users_service
 
@@ -33,6 +35,13 @@ async def lifespan(_app: FastAPI):
     yield
     # shutdown
     await async_engine.dispose()
+
+
+class Tags(StrEnum):
+    users = "users"
+    posts = "posts"
+    comments = "comments"
+    likes = "likes"
 
 
 app = FastAPI(lifespan=lifespan)
@@ -55,8 +64,10 @@ app.mount("/media", StaticFiles(directory="media"), name="media")
 
 templates = Jinja2Templates(directory="templates")
 
-app.include_router(users.router, tags=["users"])
-app.include_router(posts.router, tags=["posts"])
+app.include_router(users.router, tags=[Tags.users])
+app.include_router(posts.router, tags=[Tags.posts])
+app.include_router(comments.router, tags=[Tags.comments])
+app.include_router(likes.router, tags=[Tags.likes])
 
 # ---------------- Auth pages ------------------
 
@@ -135,8 +146,9 @@ async def validation_exception_handler(request: Request, exception: RequestValid
 @app.get("/", include_in_schema=False, name="home")
 @app.get("/posts", include_in_schema=False, name="posts")
 async def home(request: Request, session: SessionDep):
-    total_count = await posts_service.get_all_posts_count(session)
-    posts: list[Post] = await posts_service.list_posts_ordered(session, limit=settings.posts_per_page)
+    filter_query = PostListParams(limit=settings.posts_per_page, skip=0, order_by="created_at", order_direction="desc")
+    total_count = await posts_service.count_posts(session, filter_query)
+    posts: list[Post] = await posts_service.list_posts(session, filter_query)
 
     has_more = len(posts) < total_count
     return templates.TemplateResponse(
@@ -153,7 +165,7 @@ async def home(request: Request, session: SessionDep):
 
 @app.get("/posts/{post_id}", include_in_schema=False, name="post")
 async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep):
-    post = await posts_service.get_post_by_id(session, post_id)
+    post = await posts_service.get_post_for_response(session, post_id)
     if post:
         return templates.TemplateResponse(request, "post.html", {"post": post, "title": post.title})
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")

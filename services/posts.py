@@ -1,35 +1,112 @@
 """Read-side post access shared by API routes and HTML routes."""
 
 import uuid
+from typing import Any, TypeVar
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, selectinload, with_expression
 
 from models import Post
+from models.comments import Comment
+from models.likes import Like
 from models.users import User
-from schemas.posts import PostCreate, PostUpdate
+from schemas.common import UserId
+from schemas.posts import (
+    PostCreate,
+    PostId,
+    PostListParams,
+    PostSortField,
+    PostUpdatePatch,
+    PostUpdatePut,
+)
+
+SelectRow = TypeVar("SelectRow", bound=tuple[Any, ...])
+
+POST_COMMENT_COUNT_EXPR = (
+    select(func.count(Comment.id))
+    .where(Comment.post_id == Post.id)
+    .correlate_except(Comment)
+    .scalar_subquery()
+    .label("comments_count")
+)
+POST_LIKE_COUNT_EXPR = (
+    select(func.count())
+    .select_from(Like)
+    .where(Like.post_id == Post.id)
+    .correlate_except(Like)
+    .scalar_subquery()
+    .label("likes_count")
+)
+
+POST_SORT_EXPRESSIONS = {
+    PostSortField.CREATED_AT: Post.created_at,
+    PostSortField.UPDATED_AT: Post.updated_at,
+    PostSortField.COMMENTS_COUNT: POST_COMMENT_COUNT_EXPR,
+    PostSortField.LIKES_COUNT: POST_LIKE_COUNT_EXPR,
+}
+
+if set(POST_SORT_EXPRESSIONS) != set(PostSortField):
+    raise RuntimeError("POST_SORT_EXPRESSIONS must define every PostSortField")
 
 
-async def list_posts_ordered(session: AsyncSession, skip: int = 0, limit: int = 10) -> list[Post]:
+def apply_post_filters(
+    stmt: Select[SelectRow],
+    filters: PostListParams,
+) -> Select[SelectRow]:
+    if filters.author_id is not None:
+        stmt = stmt.where(Post.user_id == filters.author_id)
+
+    if filters.q:
+        stmt = stmt.where(Post.title.ilike(f"%{filters.q}%") | Post.content.ilike(f"%{filters.q}%"))
+
+    if filters.created_from is not None:
+        stmt = stmt.where(Post.created_at >= filters.created_from)
+
+    if filters.created_before is not None:
+        stmt = stmt.where(Post.created_at < filters.created_before)
+
+    return stmt
+
+
+async def list_posts(
+    session: AsyncSession,
+    filter_query: PostListParams,
+) -> list[Post]:
+    sort_expression = POST_SORT_EXPRESSIONS[filter_query.order_by]
+
+    # basic select
+    stmt = select(Post).options(
+        selectinload(Post.author).load_only(
+            User.id,
+            User.username,
+            User.image_file,
+        ),
+        with_expression(
+            Post.comments_count,
+            POST_COMMENT_COUNT_EXPR,
+        ),
+        with_expression(
+            Post.likes_count,
+            POST_LIKE_COUNT_EXPR,
+        ),
+    )
+    # add filters
+    stmt = apply_post_filters(stmt, filter_query)
+    # sorting, pagination
     stmt = (
-        select(Post)
-        .options(
-            selectinload(Post.author).load_only(
-                User.id,
-                User.username,
-                User.image_file,
-            )
+        stmt.order_by(
+            sort_expression.desc() if filter_query.order_direction == "desc" else sort_expression.asc(),
+            Post.id.desc() if filter_query.order_direction == "desc" else Post.id.asc(),
         )
-        .order_by(Post.created_at.desc(), Post.id.desc())
-        .offset(skip)
-        .limit(limit)
+        .offset(filter_query.skip)
+        .limit(filter_query.limit)
     )
     result = await session.execute(stmt)
     return result.scalars().all()
 
 
-async def get_post_by_id(session: AsyncSession, post_id: uuid.UUID) -> Post | None:
+async def get_post_for_response(session: AsyncSession, post_id: PostId) -> Post | None:
     stmt = (
         select(Post)
         .options(
@@ -37,26 +114,39 @@ async def get_post_by_id(session: AsyncSession, post_id: uuid.UUID) -> Post | No
                 User.id,
                 User.username,
                 User.image_file,
-            )
+            ),
+            with_expression(
+                Post.comments_count,
+                POST_COMMENT_COUNT_EXPR,
+            ),
+            with_expression(
+                Post.likes_count,
+                POST_LIKE_COUNT_EXPR,
+            ),
         )
         .where(Post.id == post_id)
+        .execution_options(populate_existing=True)
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def get_post_for_write(session: AsyncSession, post_id: uuid.UUID) -> Post | None:
+async def get_post_for_write(session: AsyncSession, post_id: PostId) -> Post | None:
     return await session.get(Post, post_id)
 
 
 async def get_posts_by_user_id(
     session: AsyncSession,
-    user_id: uuid.UUID,
+    user_id: UserId,
     skip: int = 0,
     limit: int = 10,
 ) -> list[Post]:
     stmt = (
         select(Post)
+        .options(
+            with_expression(Post.comments_count, POST_COMMENT_COUNT_EXPR),
+            with_expression(Post.likes_count, POST_LIKE_COUNT_EXPR),
+        )
         .where(Post.user_id == user_id)
         .order_by(
             Post.created_at.desc(),
@@ -69,21 +159,24 @@ async def get_posts_by_user_id(
     return result.scalars().all()
 
 
-async def create_post(session: AsyncSession, post: PostCreate, user_id: uuid.UUID) -> Post:
-    new_post = Post(**post.model_dump(), user_id=user_id)
-    session.add(new_post)
+async def create_post(session: AsyncSession, post_data: PostCreate, user_id: UserId) -> Post:
+    post = Post(**post_data.model_dump(), user_id=user_id)
+    session.add(post)
     await session.commit()
-    await session.refresh(new_post, attribute_names=["author"])
+    new_post = await get_post_for_response(session, post.id)
     return new_post
 
 
 async def update_post(
     session: AsyncSession,
-    post_data: PostCreate | PostUpdate,
+    post_data: PostUpdatePut | PostUpdatePatch,
     existing_post: Post,
 ) -> Post:
-    if isinstance(post_data, PostUpdate):
-        update_data = post_data.model_dump(exclude_unset=True)
+    if isinstance(post_data, PostUpdatePatch):
+        update_data = post_data.model_dump(
+            exclude_none=True,
+            exclude_unset=True,
+        )
     else:
         update_data = post_data.model_dump()
 
@@ -91,8 +184,8 @@ async def update_post(
         setattr(existing_post, key, value)
 
     await session.commit()
-    await session.refresh(existing_post, attribute_names=["author"])
-    return existing_post
+    updated_post = await get_post_for_response(session, existing_post.id)
+    return updated_post
 
 
 async def delete_post(session: AsyncSession, existing_post: Post) -> None:
@@ -100,11 +193,14 @@ async def delete_post(session: AsyncSession, existing_post: Post) -> None:
     await session.commit()
 
 
-async def get_all_posts_count(session: AsyncSession) -> int:
-    count = await session.scalar(select(func.count(Post.id)))
-    return count or 0
+async def count_posts(session: AsyncSession, filter_query: PostListParams) -> int:
+    stmt = select(func.count()).select_from(Post)
+    stmt = apply_post_filters(stmt, filter_query)
+    result = await session.execute(stmt)
+    return result.scalar()
 
 
-async def count_posts_by_user_id(session: AsyncSession, user_id: uuid.UUID) -> int:
-    count = await session.scalar(select(func.count(Post.id)).where(Post.user_id == user_id))
-    return count or 0
+async def count_posts_by_user_id(session: AsyncSession, user_id: UserId) -> int:
+    stmt = select(func.count()).select_from(Post).where(Post.user_id == user_id)
+    result = await session.execute(stmt)
+    return result.scalar()

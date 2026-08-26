@@ -1,0 +1,72 @@
+"""Read-side post access shared by API routes and HTML routes."""
+
+import uuid
+from typing import Any, TypeVar
+
+from sqlalchemy import Select, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, selectinload
+
+from models import Post
+from models.comments import Comment
+from models.users import User
+from schemas.comments import CommentCreateRequest, CommentListParams
+from schemas.common import UserId
+from schemas.posts import PostIdPathParam, PostListParams
+
+
+async def list_post_comments(
+    session: AsyncSession,
+    post_id: PostIdPathParam,
+    filter_query: CommentListParams,
+) -> list[Comment]:
+    # for now, it's only created_at
+    sort_column = Comment.created_at
+
+    # basic select
+    stmt = (
+        select(Comment)
+        .options(
+            selectinload(Comment.user).load_only(
+                User.id,
+                User.username,
+                User.image_file,
+            )
+        )
+        .where(Comment.post_id == post_id)
+    )
+
+    # add sorting, pagination
+    stmt = (
+        stmt.order_by(
+            sort_column.desc() if filter_query.order_direction == "desc" else sort_column.asc(),
+            Comment.id.desc() if filter_query.order_direction == "desc" else Comment.id.asc(),
+        )
+        .offset(filter_query.skip)
+        .limit(filter_query.limit)
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def count_comments(session: AsyncSession, post_id: PostIdPathParam):
+    stmt = select(func.count()).select_from(Comment).where(Comment.post_id == post_id)
+    result = await session.execute(stmt)
+    return result.scalar_one()
+
+
+async def create_comment(
+    session: AsyncSession,
+    post_id: PostIdPathParam,
+    user_id: UserId,
+    comment: CommentCreateRequest,
+) -> Comment:
+    new_comment = Comment(
+        **comment.model_dump(),
+        user_id=user_id,
+        post_id=post_id,
+    )
+    session.add(new_comment)
+    await session.commit()
+    await session.refresh(new_comment, attribute_names=["user"])
+    return new_comment

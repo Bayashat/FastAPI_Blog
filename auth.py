@@ -8,7 +8,6 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
-from starlette.concurrency import run_in_threadpool
 
 from config import settings
 from dependencies import SessionDep
@@ -66,26 +65,37 @@ def verify_access_token(token: str) -> str | None:
         return payload.get("sub")
 
 
-def invalid_token_exception() -> HTTPException:
-    return HTTPException(
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: SessionDep) -> User:
+    credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired token",
+        detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: SessionDep) -> User:
     user_id = verify_access_token(token)
+
     if user_id is None:
-        raise invalid_token_exception()
+        raise credentials_exception
+
     try:
         user_uuid = uuid.UUID(user_id)
     except (TypeError, ValueError):
-        raise invalid_token_exception()
+        raise credentials_exception
+
     user = await session.get(User, user_uuid)
     if not user:
-        raise invalid_token_exception()
+        raise credentials_exception
+
     return user
 
+
+# async def get_current_active_user(
+#     current_user: Annotated[User, Depends(get_current_user)],
+# ):
+#     if current_user.disabled:
+#         raise HTTPException(status_code=400, detail="Inactive user")
+#     return current_user
+
+DUMMY_PASSWORD_HASH = password_hash.hash("dummy-password-not-used-for-login")
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
