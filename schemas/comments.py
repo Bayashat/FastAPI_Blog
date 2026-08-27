@@ -1,13 +1,20 @@
-from datetime import datetime
-from typing import Literal
+import uuid
+from typing import Annotated, Literal
 
+from fastapi import Path
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
 )
 
+from schemas.posts import PostId
 from schemas.users import UserPublic
+
+CommentIdPathParam = Annotated[uuid.UUID, Path(title="Comment ID", description="The unique identifier of the comment")]
+CommentId = Annotated[uuid.UUID, Field(title="Comment ID", description="The unique identifier of the comment")]
+CommentContent = Annotated[str, Field(title="Comment content", description="The content of the comment")]
 
 
 class CommentListParams(BaseModel):
@@ -23,8 +30,11 @@ class CommentListParams(BaseModel):
 class CommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    content: str
-    created_at: datetime
+    id: CommentId
+    post_id: PostId
+    content: CommentContent
+    created_at: AwareDatetime
+    updated_at: AwareDatetime
 
     user: UserPublic | None
 
@@ -40,4 +50,8 @@ class ListCommentsResponse(BaseModel):
 class CommentCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    content: str
+    content: CommentContent
+
+
+class UpdateCommentRequest(BaseModel):
+    content: CommentContent

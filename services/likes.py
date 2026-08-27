@@ -6,9 +6,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.likes import Like
-from models.posts import Post
 from schemas.common import UserId
 from schemas.posts import PostId
+from services.posts import check_post_exists
 
 
 class PostNotFoundError(Exception):
@@ -29,9 +29,7 @@ async def set_post_like_state(
     liked: bool,
 ) -> PostLikeState:
     try:
-        post_exists = await session.scalar(
-            select(select(Post.id).where(Post.id == post_id).exists()),
-        )
+        post_exists = await check_post_exists(session, post_id)
 
         if post_exists is None:
             raise PostNotFoundError

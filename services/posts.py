@@ -211,3 +211,10 @@ async def count_posts_by_user_id(session: AsyncSession, user_id: UserId) -> int:
     stmt = select(func.count()).select_from(Post).where(Post.user_id == user_id)
 
     return (await session.execute(stmt)).scalar_one()
+
+
+async def check_post_exists(session: AsyncSession, post_id: PostId) -> bool:
+    stmt = select(
+        select(Post.id).where(Post.id == post_id).exists(),
+    )
+    return await session.scalar(stmt)

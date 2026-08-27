@@ -68,7 +68,8 @@ templates = Jinja2Templates(directory="templates")
 
 app.include_router(users.router, tags=[Tags.users])
 app.include_router(posts.router, tags=[Tags.posts])
-app.include_router(comments.router, tags=[Tags.comments])
+app.include_router(comments.post_comments_router, tags=[Tags.comments])
+app.include_router(comments.comments_router, tags=[Tags.comments])
 app.include_router(likes.router, tags=[Tags.likes])
 
 # ---------------- Auth pages ------------------

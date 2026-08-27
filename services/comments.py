@@ -8,7 +8,12 @@ from sqlalchemy.orm import joinedload
 
 from models.comments import Comment
 from models.users import User
-from schemas.comments import CommentCreateRequest, CommentListParams
+from schemas.comments import (
+    CommentContent,
+    CommentCreateRequest,
+    CommentId,
+    CommentListParams,
+)
 from schemas.common import UserId
 from schemas.posts import PostIdPathParam
 
@@ -74,3 +79,19 @@ async def create_comment(
     await session.commit()
     await session.refresh(new_comment, attribute_names=["user"])
     return new_comment
+
+
+async def get_comment_by_id(session: AsyncSession, comment_id: CommentId) -> Comment | None:
+    return await session.get(Comment, comment_id)
+
+
+async def update_comment(session: AsyncSession, comment: Comment, new_content: CommentContent) -> Comment:
+    comment.content = new_content
+    await session.commit()
+    await session.refresh(comment, attribute_names=["user", "updated_at"])
+    return comment
+
+
+async def delete_comment(session: AsyncSession, existing_comment: Comment):
+    await session.delete(existing_comment)
+    await session.commit()
