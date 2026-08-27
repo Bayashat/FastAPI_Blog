@@ -20,7 +20,7 @@ from services import posts as post_service
 router = APIRouter(prefix="/api/posts")
 
 
-@router.get("/", response_model=PaginatedPostsResponse, status_code=status.HTTP_200_OK)
+@router.get("", response_model=PaginatedPostsResponse, status_code=status.HTTP_200_OK)
 async def get_posts(
     session: SessionDep,
     # skip: Annotated[int, Query(ge=0)] = 0,

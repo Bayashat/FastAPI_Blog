@@ -21,7 +21,7 @@ post_comments_router = APIRouter(prefix="/api/posts/{post_id}/comments")
 comments_router = APIRouter(prefix="/api/comments")
 
 
-@post_comments_router.get("/", response_model=ListCommentsResponse, status_code=status.HTTP_200_OK)
+@post_comments_router.get("", response_model=ListCommentsResponse, status_code=status.HTTP_200_OK)
 async def list_post_comments(
     session: SessionDep,
     post_id: PostIdPathParam,
@@ -43,13 +43,20 @@ async def list_post_comments(
     )
 
 
-@post_comments_router.post("/comments", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
+@post_comments_router.post("", response_model=CommentResponse, status_code=status.HTTP_201_CREATED)
 async def add_post_comment(
     session: SessionDep,
     post_id: PostIdPathParam,
     user: CurrentUser,
     comment: CommentCreateRequest,
 ) -> Comment:
+    comment_exists = await comment_service.get_comment_by_id(session, post_id)
+    if not comment_exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Comment not found!",
+        )
+
     new_comment = await comment_service.create_comment(session, post_id, user.id, comment)
     return new_comment
 
@@ -68,10 +75,10 @@ async def update_comment(
             detail="Comment not found!",
         )
 
-    elif existing_comment.user_id != user.id:
+    if existing_comment.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to update this post!",
+            detail="You are not allowed to update this comment!",
         )
 
     updated_comment = await comment_service.update_comment(
@@ -98,7 +105,7 @@ async def delete_comment(
     if existing_comment.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You are not allowed to delete this post!",
+            detail="You are not allowed to delete this comment!",
         )
 
     await comment_service.delete_comment(

@@ -2,19 +2,21 @@ import uuid
 from typing import Annotated, Literal
 
 from fastapi import Path
-from pydantic import (
-    AwareDatetime,
-    BaseModel,
-    ConfigDict,
-    Field,
-)
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
 from schemas.posts import PostId
 from schemas.users import UserPublic
 
 CommentIdPathParam = Annotated[uuid.UUID, Path(title="Comment ID", description="The unique identifier of the comment")]
 CommentId = Annotated[uuid.UUID, Field(title="Comment ID", description="The unique identifier of the comment")]
-CommentContent = Annotated[str, Field(title="Comment content", description="The content of the comment")]
+CommentContent = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True,
+        min_length=1,
+        max_length=5000,
+    ),
+]
 
 
 class CommentListParams(BaseModel):
@@ -54,4 +56,6 @@ class CommentCreateRequest(BaseModel):
 
 
 class UpdateCommentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     content: CommentContent

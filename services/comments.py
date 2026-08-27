@@ -1,5 +1,3 @@
-"""Read-side post access shared by API routes and HTML routes."""
-
 from collections.abc import Sequence
 
 from sqlalchemy import func, select
@@ -92,6 +90,6 @@ async def update_comment(session: AsyncSession, comment: Comment, new_content: C
     return comment
 
 
-async def delete_comment(session: AsyncSession, existing_comment: Comment):
+async def delete_comment(session: AsyncSession, existing_comment: Comment) -> None:
     await session.delete(existing_comment)
     await session.commit()
