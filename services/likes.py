@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
-from sqlalchemy import Delete, delete, func, select
-from sqlalchemy.dialects.postgresql import Insert, insert
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,15 +30,14 @@ async def set_post_like_state(
 ) -> PostLikeState:
     try:
         post_exists = await session.scalar(
-            select(Post.id).where(Post.id == post_id),
+            select(select(Post.id).where(Post.id == post_id).exists()),
         )
 
         if post_exists is None:
             raise PostNotFoundError
 
-        stmt: Insert | Delete
         if liked:
-            stmt = (
+            insert_stmt = (
                 insert(Like)
                 .values(
                     user_id=user_id,
@@ -51,12 +50,13 @@ async def set_post_like_state(
                     ]
                 )
             )
+            await session.execute(insert_stmt)
         else:
-            stmt = delete(Like).where(
+            delete_stmt = delete(Like).where(
                 Like.post_id == post_id,
                 Like.user_id == user_id,
             )
-        await session.execute(stmt)
+            await session.execute(delete_stmt)
 
         state_stmt = (
             select(

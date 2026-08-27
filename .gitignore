@@ -20,3 +20,13 @@ blog.db
 
 # OS files
 .DS_Store
+
+# Test / coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+
+# Type checking / linting
+.mypy_cache/
+.ruff_cache/

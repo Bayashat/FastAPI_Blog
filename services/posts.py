@@ -165,7 +165,8 @@ async def create_post(session: AsyncSession, post_data: PostCreate, user_id: Use
 
     new_post = await get_post_for_response(session, post.id)
 
-    assert new_post is not None
+    if new_post is None:
+        raise RuntimeError("Created post could not be loaded")
 
     return new_post
 

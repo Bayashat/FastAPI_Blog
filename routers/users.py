@@ -328,7 +328,7 @@ async def get_user_posts(
     session: SessionDep,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
-) -> dict:
+) -> UserPostsResponse:
     existing_user = await user_service.get_user_by_id(session, user_id)
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -338,14 +338,16 @@ async def get_user_posts(
 
     has_more = skip + len(user_posts) < total_count
 
-    return {
-        "user": existing_user,
-        "posts": user_posts,
-        "total": total_count,
-        "skip": skip,
-        "limit": limit,
-        "has_more": has_more,
-    }
+    return UserPostsResponse.model_validate(
+        {
+            "user": existing_user,
+            "posts": user_posts,
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "has_more": has_more,
+        }
+    )
 
 
 @router.get("/{user_id}", response_model=UserPublic)

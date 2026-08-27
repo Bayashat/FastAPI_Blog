@@ -1,9 +1,19 @@
 # ruff: noqa: E402
 
+"""Reset the local database and load deterministic development fixtures.
+
+This script is destructive. It refuses to run against a non-local database,
+requires the Alembic-managed tables to exist, and replaces all business data in
+one transaction.
+"""
+
 import asyncio
 import sys
+import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TypedDict
 
 # Keep project imports below this path bootstrap so the script also works when
 # executed directly as `python local/scripts/populate_db.py`.
@@ -11,56 +21,64 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import httpx
-from sqlalchemy import delete, select, update
+from sqlalchemy import Connection, delete, func, inspect, select
+from sqlalchemy.engine import make_url
 
+from auth import hash_password, hash_reset_token
+from config import settings
 from database import AsyncSessionLocal, Base, async_engine
 from image_utils import PROFILE_PICS_DIR
-from main import app
-from models import PasswordResetToken, Post, User
+from models import Comment, Like, PasswordResetToken, Post, User
 
-POPULATE_IMAGES_DIR = Path("populate_images")
+LOCAL_DATABASE_HOSTS = {"127.0.0.1", "::1", "localhost"}
+SEED_NAMESPACE = uuid.UUID("3ef73c58-1f53-4a89-b458-d68591149ce0")
 
-USERS = [
+
+class UserSeed(TypedDict):
+    username: str
+    email: str
+    password: str
+
+
+class PostSeed(TypedDict):
+    title: str
+    content: str
+
+
+USERS: list[UserSeed] = [
     {
         "username": "CoreyMSchafer",
-        "email": "CoreyMSchafer@gmail.com",
+        "email": "coreymschafer@gmail.com",
         "password": "TestPassword1!",
-        "image": "corey.png",
     },
     {
         "username": "DefaultDude",
-        "email": "TestEmail2@test.com",
+        "email": "testemail2@test.com",
         "password": "TestPassword2!",
-        # No image - uses default
     },
     {
         "username": "WillowTheCat",
-        "email": "TestEmail3@test.com",
+        "email": "testemail3@test.com",
         "password": "TestPassword3!",
-        "image": "willow.png",
     },
     {
         "username": "FarmDogs",
-        "email": "TestEmail4@test.com",
+        "email": "testemail4@test.com",
         "password": "TestPassword4!",
-        "image": "farmdogs.png",
     },
     {
         "username": "PoppyTheCoder",
-        "email": "TestEmail5@test.com",
+        "email": "testemail5@test.com",
         "password": "TestPassword5!",
-        "image": "poppy.png",
     },
     {
         "username": "GoodBoyBronx",
-        "email": "TestEmail6@test.com",
+        "email": "testemail6@test.com",
         "password": "TestPassword6!",
-        "image": "bronx.png",
     },
 ]
 
-POSTS = [
+POSTS: list[PostSeed] = [
     {
         "title": "Why I Love FastAPI",
         "content": "FastAPI has completely changed how I build APIs. The automatic documentation, type hints, and async support make development so much faster. Plus, the performance is incredible!",
@@ -236,158 +254,272 @@ POSTS = [
 ]
 
 # The 44th post - always the oldest (easter egg for pagination tutorial)
-POST_44 = {
+POST_44: PostSeed = {
     "title": "Fun Fact: My High School Football Number Was #44",
     "content": "If you've paginated all the way to this post, the 44th one... you get to learn this fun fact: that my high school football number was #44. Other notable absolute legends who wore number #44 include: Jerry West (NBA - Also fellow WV Native), Hank Aaron (MLB), and Floyd Little (NFL).",
 }
 
 
-async def ensure_tables() -> None:
-    async with async_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+@dataclass(frozen=True, slots=True)
+class ResetTokenFixture:
+    email: str
+    token: str
+    expired: bool
 
 
-async def clear_existing_data() -> None:
-    # Delete profile pictures from local storage
-    if PROFILE_PICS_DIR.exists():
-        for file in PROFILE_PICS_DIR.iterdir():
-            if file.is_file() and file.name != ".gitkeep":
-                file.unlink()
-        print(f"Deleted profile pictures from {PROFILE_PICS_DIR}")
-
-    # Clear database tables (order respects foreign keys)
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(PasswordResetToken))
-        await db.execute(delete(Post))
-        await db.execute(delete(User))
-        await db.commit()
-    print("Cleared existing data")
+@dataclass(frozen=True, slots=True)
+class SeedData:
+    users: list[User]
+    posts: list[Post]
+    comments: list[Comment]
+    likes: list[Like]
+    reset_tokens: list[PasswordResetToken]
+    reset_token_fixtures: list[ResetTokenFixture]
 
 
-async def update_post_dates() -> None:
-    now = datetime.now(UTC)
+@dataclass(frozen=True, slots=True)
+class SeedCounts:
+    users: int
+    posts: int
+    comments: int
+    likes: int
+    password_reset_tokens: int
 
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Post).order_by(Post.id))
-        posts = result.scalars().all()
 
-        if not posts:
-            return
+def seed_uuid(entity: str, index: int) -> uuid.UUID:
+    return uuid.uuid5(SEED_NAMESPACE, f"{entity}:{index}")
 
-        # First post (POST_44) is the oldest - ~90 days ago
-        await db.execute(
-            update(Post).where(Post.id == posts[0].id).values(created_at=now - timedelta(days=90)),
+
+def comment_count_for_post(post_index: int) -> int:
+    # The oldest post has enough comments to exercise the default page size.
+    return 12 if post_index == 0 else post_index % 4 + 1
+
+
+def like_count_for_post(post_index: int) -> int:
+    return post_index % len(USERS) + 1
+
+
+def reset_token_value(user_index: int) -> str:
+    return f"local-seed-reset-token-{user_index + 1:02d}-{'x' * 32}"
+
+
+def post_created_at(now: datetime, post_index: int, post_count: int) -> datetime:
+    if post_count == 1:
+        return now - timedelta(days=2)
+
+    # Deterministically spread posts from 90 days ago to 2 days ago.
+    days_ago = 90 - (88 * post_index / (post_count - 1))
+    return now - timedelta(days=days_ago)
+
+
+def ensure_local_database() -> None:
+    database_url = make_url(settings.database_url)
+    if database_url.host not in LOCAL_DATABASE_HOSTS:
+        raise RuntimeError(
+            "Refusing to replace data in a non-local database. "
+            f"Expected host in {sorted(LOCAL_DATABASE_HOSTS)}, got {database_url.host!r}."
         )
 
-        # Remaining posts: each ~1.5 days newer than previous
-        for i, post in enumerate(posts[1:], start=1):
-            days_ago = (len(posts) - i) * 1.5
-            hours_offset = (i * 7) % 24
-            post_date = now - timedelta(days=days_ago, hours=hours_offset)
-            await db.execute(
-                update(Post).where(Post.id == post.id).values(created_at=post_date),
+
+def get_table_names(connection: Connection) -> set[str]:
+    return set(inspect(connection).get_table_names())
+
+
+async def verify_schema() -> None:
+    expected_tables = set(Base.metadata.tables)
+    async with async_engine.connect() as connection:
+        existing_tables = await connection.run_sync(get_table_names)
+
+    missing_tables = expected_tables - existing_tables
+    if missing_tables:
+        missing = ", ".join(sorted(missing_tables))
+        raise RuntimeError(f"Database schema is missing tables: {missing}. Run `make migrate` first.")
+
+
+async def build_seed_data(now: datetime | None = None) -> SeedData:
+    now = now or datetime.now(UTC).replace(microsecond=0)
+    password_hashes = await asyncio.gather(
+        *(asyncio.to_thread(hash_password, user_seed["password"]) for user_seed in USERS)
+    )
+
+    users = [
+        User(
+            id=seed_uuid("user", index),
+            username=user_seed["username"],
+            email=user_seed["email"],
+            password_hash=password_hash,
+            image_file=None,
+            created_at=now - timedelta(days=180 - index),
+            updated_at=now - timedelta(days=180 - index),
+        )
+        for index, (user_seed, password_hash) in enumerate(zip(USERS, password_hashes, strict=True))
+    ]
+
+    post_seeds = [POST_44, *reversed(POSTS)]
+    posts: list[Post] = []
+    for post_index, post_seed in enumerate(post_seeds):
+        author_index = 0 if post_index == 0 else (post_index - 1) % len(users)
+        created_at = post_created_at(now, post_index, len(post_seeds))
+        posts.append(
+            Post(
+                id=seed_uuid("post", post_index),
+                title=post_seed["title"],
+                content=post_seed["content"],
+                user_id=users[author_index].id,
+                created_at=created_at,
+                updated_at=created_at,
+            )
+        )
+
+    comments: list[Comment] = []
+    comment_index = 0
+    for post_index, post in enumerate(posts):
+        comment_count = comment_count_for_post(post_index)
+        post_age = now - post.created_at
+        for offset in range(comment_count):
+            commenter = users[(post_index + offset + 1) % len(users)]
+            comments.append(
+                Comment(
+                    id=seed_uuid("comment", comment_index),
+                    user_id=commenter.id,
+                    post_id=post.id,
+                    content=f'Test comment {offset + 1} on "{post.title}" by {commenter.username}.',
+                    created_at=post.created_at + post_age * ((offset + 1) / (comment_count + 1)),
+                )
+            )
+            comment_index += 1
+
+    likes: list[Like] = []
+    for post_index, post in enumerate(posts):
+        like_count = like_count_for_post(post_index)
+        post_age = now - post.created_at
+        for offset in range(like_count):
+            user = users[(post_index + offset) % len(users)]
+            likes.append(
+                Like(
+                    user_id=user.id,
+                    post_id=post.id,
+                    created_at=post.created_at + post_age * ((offset + 1) / (like_count + 1)),
+                )
             )
 
-        await db.commit()
-    print("Updated post dates")
+    reset_tokens: list[PasswordResetToken] = []
+    reset_token_fixtures: list[ResetTokenFixture] = []
+    for user_index, user in enumerate(users):
+        token = reset_token_value(user_index)
+        expired = user_index % 2 == 1
+        reset_tokens.append(
+            PasswordResetToken(
+                id=seed_uuid("reset-token", user_index),
+                user_id=user.id,
+                token_hash=hash_reset_token(token),
+                expires_at=now - timedelta(hours=1) if expired else now + timedelta(hours=1),
+                created_at=now - timedelta(hours=2 if expired else 1),
+            )
+        )
+        reset_token_fixtures.append(
+            ResetTokenFixture(
+                email=user.email,
+                token=token,
+                expired=expired,
+            )
+        )
+
+    return SeedData(
+        users=users,
+        posts=posts,
+        comments=comments,
+        likes=likes,
+        reset_tokens=reset_tokens,
+        reset_token_fixtures=reset_token_fixtures,
+    )
+
+
+async def replace_database_data(seed_data: SeedData) -> None:
+    async with AsyncSessionLocal.begin() as session:
+        # Explicit child-to-parent order keeps this correct even without relying on cascades.
+        await session.execute(delete(PasswordResetToken))
+        await session.execute(delete(Like))
+        await session.execute(delete(Comment))
+        await session.execute(delete(Post))
+        await session.execute(delete(User))
+
+        session.add_all(seed_data.users)
+        await session.flush()
+        session.add_all(seed_data.posts)
+        await session.flush()
+        session.add_all(seed_data.comments)
+        await session.flush()
+        session.add_all(seed_data.likes)
+        await session.flush()
+        session.add_all(seed_data.reset_tokens)
+
+
+async def read_database_counts() -> SeedCounts:
+    async with AsyncSessionLocal() as session:
+        return SeedCounts(
+            users=(await session.execute(select(func.count()).select_from(User))).scalar_one(),
+            posts=(await session.execute(select(func.count()).select_from(Post))).scalar_one(),
+            comments=(await session.execute(select(func.count()).select_from(Comment))).scalar_one(),
+            likes=(await session.execute(select(func.count()).select_from(Like))).scalar_one(),
+            password_reset_tokens=(
+                await session.execute(select(func.count()).select_from(PasswordResetToken))
+            ).scalar_one(),
+        )
+
+
+def expected_counts(seed_data: SeedData) -> SeedCounts:
+    return SeedCounts(
+        users=len(seed_data.users),
+        posts=len(seed_data.posts),
+        comments=len(seed_data.comments),
+        likes=len(seed_data.likes),
+        password_reset_tokens=len(seed_data.reset_tokens),
+    )
+
+
+def clear_profile_pictures() -> None:
+    if not PROFILE_PICS_DIR.exists():
+        return
+
+    for file in PROFILE_PICS_DIR.iterdir():
+        if file.is_file() and file.name != ".gitkeep":
+            file.unlink()
+
+
+def print_summary(seed_data: SeedData, counts: SeedCounts) -> None:
+    print("\nDone! Database fixture counts:")
+    print(f"  users: {counts.users}")
+    print(f"  posts: {counts.posts}")
+    print(f"  comments: {counts.comments}")
+    print(f"  likes: {counts.likes}")
+    print(f"  password_reset_tokens: {counts.password_reset_tokens}")
+
+    print("\nLocal test users:")
+    for user_seed in USERS:
+        print(f"  {user_seed['email']} / {user_seed['password']}")
+
+    print("\nLocal reset tokens:")
+    for fixture in seed_data.reset_token_fixtures:
+        status = "expired" if fixture.expired else "valid"
+        print(f"  {fixture.email}: {fixture.token} ({status})")
 
 
 async def populate() -> None:
-    await ensure_tables()
+    ensure_local_database()
+    try:
+        await verify_schema()
+        seed_data = await build_seed_data()
+        await replace_database_data(seed_data)
+        clear_profile_pictures()
 
-    transport = httpx.ASGITransport(app=app)
+        counts = await read_database_counts()
+        if counts != expected_counts(seed_data):
+            raise RuntimeError(f"Seed verification failed: expected {expected_counts(seed_data)}, got {counts}")
 
-    async with httpx.AsyncClient(
-        transport=transport,
-        base_url="http://localhost",
-    ) as client:
-        # Clear existing data (local images first, then database)
-        await clear_existing_data()
-
-        users: list[dict] = []
-
-        print(f"\nCreating {len(USERS)} users...")
-        for user_data in USERS:
-            response = await client.post(
-                "/api/users",
-                json={
-                    "username": user_data["username"],
-                    "email": user_data["email"],
-                    "password": user_data["password"],
-                },
-            )
-            response.raise_for_status()
-            user = response.json()
-            print(f"  Created: {user['username']}")
-
-            response = await client.post(
-                "/api/users/token",
-                data={
-                    "username": user_data["email"],
-                    "password": user_data["password"],
-                },
-            )
-            response.raise_for_status()
-            token = response.json()["access_token"]
-
-            if image_name := user_data.get("image"):
-                image_path = POPULATE_IMAGES_DIR / image_name
-                if image_path.exists():
-                    response = await client.patch(
-                        "/api/users/me/picture",
-                        files={
-                            "file": (
-                                image_name,
-                                image_path.read_bytes(),
-                                "image/png",
-                            ),
-                        },
-                        headers={"Authorization": f"Bearer {token}"},
-                    )
-                    response.raise_for_status()
-                    print(f"    Uploaded: {image_name}")
-
-            users.append(
-                {"id": user["id"], "username": user["username"], "token": token},
-            )
-
-        print(f"\nCreating {len(POSTS) + 1} posts...")
-
-        # First create POST_44 (will become oldest after date update)
-        response = await client.post(
-            "/api/posts",
-            json={"title": POST_44["title"], "content": POST_44["content"]},
-            headers={"Authorization": f"Bearer {users[0]['token']}"},
-        )
-        response.raise_for_status()
-        print(f"  Created: '{POST_44['title']}'")
-
-        # Create remaining posts in reverse (last in list = oldest, first = newest)
-        for i, post_data in enumerate(reversed(POSTS)):
-            user = users[i % len(users)]
-            response = await client.post(
-                "/api/posts",
-                json={
-                    "title": post_data["title"],
-                    "content": post_data["content"],
-                },
-                headers={"Authorization": f"Bearer {user['token']}"},
-            )
-            response.raise_for_status()
-            title = post_data["title"]
-            print(
-                f"  Created: '{title[:50]}...'" if len(title) > 50 else f"  Created: '{title}'",
-            )
-
-        print("\nUpdating post dates...")
-        await update_post_dates()
-
-    await async_engine.dispose()
-
-    print("\nDone!")
-    print(f"  {len(USERS)} users")
-    print(f"  {len(POSTS) + 1} posts")
-    print("  Profile pictures saved locally")
+        print_summary(seed_data, counts)
+    finally:
+        await async_engine.dispose()
 
 
 if __name__ == "__main__":
