@@ -12,6 +12,7 @@ from pydantic import (
     model_validator,
 )
 
+from models.posts import PostStatus
 from schemas.common import UserId
 from schemas.users import UserPublic
 
@@ -29,6 +30,7 @@ PostSearchParam = Annotated[str, StringConstraints(strip_whitespace=True, min_le
 
 
 class PostSortField(StrEnum):
+    PUBLISHED_AT = "published_at"
     CREATED_AT = "created_at"
     UPDATED_AT = "updated_at"
     COMMENTS_COUNT = "comments_count"
@@ -42,7 +44,8 @@ class PostListParams(BaseModel):
         ge=0,
         description="Number of elements to skip before starting to collect the result set",
     )
-    order_by: PostSortField = Field(default=PostSortField.CREATED_AT, description="Field used to order posts")
+    # status: PostStatus = Field(default=PostStatus.PUBLISHED, description="Field used to filter by post status")
+    order_by: PostSortField = Field(default=PostSortField.PUBLISHED_AT, description="Field used to order posts")
     order_direction: Literal["asc", "desc"] = Field(
         default="desc", description="Direction of ordering: ascending or descending"
     )
@@ -88,8 +91,13 @@ class PostBase(BaseModel):
     content: PostContent
 
 
+class CreatePostStatus(StrEnum):
+    DRAFT = "draft"
+    PUBLISHED = "published"
+
+
 class PostCreate(PostBase):
-    pass
+    status: CreatePostStatus = CreatePostStatus.DRAFT
 
 
 class PostUpdatePut(PostBase):
@@ -135,14 +143,25 @@ class PostResponse(PostBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: PostId
+    status: PostStatus
     user_id: UserId | None
     created_at: AwareDatetime
     updated_at: AwareDatetime
+    published_at: AwareDatetime | None
 
     comments_count: int
     likes_count: int
 
     author: UserPublic | None
+
+    @model_validator(mode="after")
+    def validate_status_published_at(self) -> "PostResponse":
+        if (self.published_at) and (self.status is not PostStatus.PUBLISHED):
+            raise ValueError("Non-published post cannot have published_at field")
+        elif (self.published_at is None) and (self.status is PostStatus.PUBLISHED):
+            raise ValueError("Published post must have published_at field")
+
+        return self
 
 
 class PaginatedPostsResponse(BaseModel):
@@ -188,8 +207,10 @@ class UserPostItem(PostBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: PostId
+    status: PostStatus
     created_at: AwareDatetime
     updated_at: AwareDatetime
+    published_at: AwareDatetime | None
 
     comments_count: int
     likes_count: int

@@ -182,8 +182,10 @@ async def user_posts_page(request: Request, user_id: uuid.UUID, session: Session
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    total_count = await posts_service.count_posts_by_user_id(session, user_id)
-    user_posts = await posts_service.get_posts_by_user_id(session, user_id, limit=settings.posts_per_page)
+    total_count = await posts_service.count_posts_by_user_id(session, user_id, is_owner=False)
+    user_posts = await posts_service.get_posts_by_user_id(
+        session, user_id, is_owner=False, limit=settings.posts_per_page
+    )
 
     has_more = len(user_posts) < total_count
 

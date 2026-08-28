@@ -16,6 +16,7 @@ from schemas.comments import (
 )
 from schemas.posts import PostIdPathParam
 from services import comments as comment_service
+from services import posts as post_service
 
 post_comments_router = APIRouter(prefix="/api/posts/{post_id}/comments")
 comments_router = APIRouter(prefix="/api/comments")
@@ -50,11 +51,11 @@ async def add_post_comment(
     user: CurrentUser,
     comment: CommentCreateRequest,
 ) -> Comment:
-    comment_exists = await comment_service.get_comment_by_id(session, post_id)
-    if not comment_exists:
+    post_exists = await post_service.get_post_for_write(session, post_id)
+    if not post_exists:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Comment not found!",
+            detail="Post not found!",
         )
 
     new_comment = await comment_service.create_comment(session, post_id, user.id, comment)
@@ -94,7 +95,7 @@ async def delete_comment(
     session: SessionDep,
     comment_id: CommentIdPathParam,
     user: CurrentUser,
-):
+) -> None:
     existing_comment = await comment_service.get_comment_by_id(session, comment_id)
     if not existing_comment:
         raise HTTPException(

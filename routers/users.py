@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from auth import (
     DUMMY_PASSWORD_HASH,
     CurrentUser,
+    OptionalCurrentUser,
     create_access_token,
     generate_reset_token,
     hash_password,
@@ -326,6 +327,7 @@ async def delete_user_picture(
 async def get_user_posts(
     user_id: UserId,
     session: SessionDep,
+    user: OptionalCurrentUser,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
 ) -> UserPostsResponse:
@@ -333,8 +335,12 @@ async def get_user_posts(
     if not existing_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    total_count = await post_service.count_posts_by_user_id(session, user_id)
-    user_posts: Sequence[Post] = await post_service.get_posts_by_user_id(session, user_id, skip=skip, limit=limit)
+    is_owner = existing_user.id == user.id if user else False
+
+    total_count = await post_service.count_posts_by_user_id(session, user_id, is_owner)
+    user_posts: Sequence[Post] = await post_service.get_posts_by_user_id(
+        session, user_id, is_owner=is_owner, skip=skip, limit=limit
+    )
 
     has_more = skip + len(user_posts) < total_count
 

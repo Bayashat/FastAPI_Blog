@@ -38,7 +38,7 @@ db-up:
 	docker compose up -d db
 
 db-down:
-	docker compose down
+	docker compose down -v
 
 migrate:
 	uv run alembic upgrade head

@@ -1,6 +1,7 @@
 """Read-side post access shared by API routes and HTML routes."""
 
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import Select, func, select
@@ -10,6 +11,7 @@ from sqlalchemy.orm import joinedload, with_expression
 from models import Post
 from models.comments import Comment
 from models.likes import Like
+from models.posts import PostStatus
 from models.users import User
 from schemas.common import UserId
 from schemas.posts import (
@@ -38,6 +40,7 @@ POST_LIKE_COUNT_EXPR = (
 )
 
 POST_SORT_EXPRESSIONS = {
+    PostSortField.PUBLISHED_AT: Post.published_at,
     PostSortField.CREATED_AT: Post.created_at,
     PostSortField.UPDATED_AT: Post.updated_at,
     PostSortField.COMMENTS_COUNT: POST_COMMENT_COUNT_EXPR,
@@ -52,6 +55,8 @@ def apply_post_filters[SelectRow: tuple[Any, ...]](
     stmt: Select[SelectRow],
     filters: PostListParams,
 ) -> Select[SelectRow]:
+    stmt = stmt.where(Post.status == PostStatus.PUBLISHED)
+
     if filters.author_id is not None:
         stmt = stmt.where(Post.user_id == filters.author_id)
 
@@ -136,6 +141,7 @@ async def get_post_for_write(session: AsyncSession, post_id: PostId) -> Post | N
 async def get_posts_by_user_id(
     session: AsyncSession,
     user_id: UserId,
+    is_owner: bool,
     skip: int = 0,
     limit: int = 10,
 ) -> Sequence[Post]:
@@ -147,18 +153,29 @@ async def get_posts_by_user_id(
         )
         .where(Post.user_id == user_id)
         .order_by(
-            Post.created_at.desc(),
+            Post.published_at.desc(),
             Post.id.desc(),
         )
         .offset(skip)
         .limit(limit)
     )
+    if not is_owner:
+        stmt = stmt.where(Post.status == PostStatus.PUBLISHED)
 
     return (await session.scalars(stmt)).all()
 
 
 async def create_post(session: AsyncSession, post_data: PostCreate, user_id: UserId) -> Post:
-    post = Post(**post_data.model_dump(), user_id=user_id)
+    status = PostStatus(post_data.status.value)
+
+    post = Post(
+        **post_data.model_dump(exclude={"status"}),
+        status=status,
+        user_id=user_id,
+    )
+
+    if status is PostStatus.PUBLISHED:
+        post.published_at = datetime.now(UTC)
 
     session.add(post)
     await session.commit()
@@ -207,8 +224,11 @@ async def count_posts(session: AsyncSession, filter_query: PostListParams) -> in
     return (await session.execute(stmt)).scalar_one()
 
 
-async def count_posts_by_user_id(session: AsyncSession, user_id: UserId) -> int:
+async def count_posts_by_user_id(session: AsyncSession, user_id: UserId, is_owner: bool) -> int:
     stmt = select(func.count()).select_from(Post).where(Post.user_id == user_id)
+
+    if not is_owner:
+        stmt = stmt.where(Post.status == PostStatus.PUBLISHED)
 
     return (await session.execute(stmt)).scalar_one()
 
@@ -217,4 +237,29 @@ async def check_post_exists(session: AsyncSession, post_id: PostId) -> bool:
     stmt = select(
         select(Post.id).where(Post.id == post_id).exists(),
     )
-    return await session.scalar(stmt)
+    return (await session.execute(stmt)).scalar_one()
+
+
+async def publish_post(session: AsyncSession, post: Post) -> Post:
+    post.status = PostStatus.PUBLISHED
+    post.published_at = datetime.now(UTC)
+
+    await session.commit()
+
+    published_post = await get_post_for_response(session, post.id)
+    if published_post is None:
+        raise RuntimeError("Published post could not be loaded")
+
+    return published_post
+
+
+async def archive_post(session: AsyncSession, post: Post) -> Post:
+    post.status = PostStatus.ARCHIVED
+
+    await session.commit()
+
+    archived_post = await get_post_for_response(session, post.id)
+    if archived_post is None:
+        raise RuntimeError("Archived post could not be loaded")
+
+    return archived_post

@@ -16,6 +16,10 @@ from models import User
 password_hash = PasswordHash.recommended()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
+optional_oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/api/users/token",
+    auto_error=False,
+)
 
 
 def hash_password(password: str) -> str:
@@ -65,13 +69,17 @@ def verify_access_token(token: str) -> str | None:
         return payload.get("sub")
 
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: SessionDep) -> User:
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+credentials_exception = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Could not validate credentials",
+    headers={"WWW-Authenticate": "Bearer"},
+)
 
+
+async def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    session: SessionDep,
+) -> User:
     user_id = verify_access_token(token)
 
     if user_id is None:
@@ -89,6 +97,31 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
     return user
 
 
+async def get_optional_current_user(
+    token: Annotated[str | None, Depends(optional_oauth2_scheme)],
+    session: SessionDep,
+) -> User | None:
+    if token is None:
+        return None
+
+    user_id = verify_access_token(token)
+
+    if user_id is None:
+        raise credentials_exception
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except (TypeError, ValueError):
+        raise credentials_exception from None
+
+    user = await session.get(User, user_uuid)
+
+    if not user:
+        raise credentials_exception
+
+    return user
+
+
 # async def get_current_active_user(
 #     current_user: Annotated[User, Depends(get_current_user)],
 # ):
@@ -99,3 +132,8 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], sessio
 DUMMY_PASSWORD_HASH = password_hash.hash("dummy-password-not-used-for-login")
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+OptionalCurrentUser = Annotated[
+    User | None,
+    Depends(get_optional_current_user),
+]

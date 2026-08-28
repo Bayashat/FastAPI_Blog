@@ -5,8 +5,8 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-# from sqlalchemy import Enum as SAEnum
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, Uuid, func
+from sqlalchemy import Enum as SAEnum
 
 # from sqlalchemy import UUID, text
 from sqlalchemy.orm import Mapped, mapped_column, query_expression, relationship
@@ -34,18 +34,18 @@ class Post(Base):
     # id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, server_default=text("gen_random_uuid()"))
     title: Mapped[str] = mapped_column(String(255))
     content: Mapped[str] = mapped_column(Text)
-
-    # status: Mapped[PostStatus] = mapped_column(
-    #     SAEnum(
-    #         PostStatus,
-    #         values_callable=lambda enum_cls: [item.value for item in enum_cls],
-    #         native_enum=False,
-    #         create_constraint=True,
-    #         name="post_status",
-    #     ),
-    #     default=PostStatus.DRAFT,
-    #     server_default=PostStatus.DRAFT.value,
-    # )
+    status: Mapped[PostStatus] = mapped_column(
+        SAEnum(
+            PostStatus,
+            # db stores "draft" instead of "DRAFT"
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+            native_enum=False,  # use "Varchar"
+            create_constraint=True,  # create check constraint
+            name="post_status",  # let alembic manage constraint
+        ),
+        default=PostStatus.DRAFT,
+        server_default=PostStatus.DRAFT.value,
+    )
 
     # extra_data: Mapped[dict[str, Any]] = mapped_column(
     #     MutableDict.as_mutable(JSONB),
@@ -54,6 +54,7 @@ class Post(Base):
     # )
 
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -64,6 +65,7 @@ class Post(Base):
 
     __table_args__ = (
         Index("ix_posts_user_id_created_at_id", user_id, created_at.desc(), id.desc()),
+        Index("ix_posts_status_published_at_id", status, published_at.desc(), id.desc()),
         Index("ix_posts_created_at_id", created_at.desc(), id.desc()),
         Index("ix_posts_updated_at_id", updated_at.desc(), id.desc()),
     )

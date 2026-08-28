@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 import pytest
 
 from local.scripts import populate_db
+from models.posts import PostStatus
 
 
 @pytest.mark.asyncio
@@ -48,11 +49,20 @@ async def test_seed_distribution_covers_pagination_and_expiry_states(monkeypatch
     seed_data = await populate_db.build_seed_data(now)
     comments_per_post = Counter(comment.post_id for comment in seed_data.comments)
     likes_per_post = Counter(like.post_id for like in seed_data.likes)
+    posts_per_status = Counter(post.status for post in seed_data.posts)
 
     assert seed_data.posts[0].title == populate_db.POST_44["title"]
     assert seed_data.posts[0].created_at == min(post.created_at for post in seed_data.posts)
     assert comments_per_post[seed_data.posts[0].id] == 12
     assert all(comments_per_post[post.id] >= 1 for post in seed_data.posts)
     assert all(likes_per_post[post.id] >= 1 for post in seed_data.posts)
+    assert posts_per_status == {
+        PostStatus.PUBLISHED: 36,
+        PostStatus.DRAFT: 4,
+        PostStatus.ARCHIVED: 4,
+    }
+    assert all((post.published_at is None) is (post.status is PostStatus.DRAFT) for post in seed_data.posts)
+    assert all(post.published_at is None or post.created_at < post.published_at <= now for post in seed_data.posts)
+    assert all(post.published_at is None or post.updated_at >= post.published_at for post in seed_data.posts)
     assert sum(fixture.expired for fixture in seed_data.reset_token_fixtures) == 3
     assert sum(not fixture.expired for fixture in seed_data.reset_token_fixtures) == 3

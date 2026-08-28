@@ -3,9 +3,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from auth import CurrentUser
+from auth import CurrentUser, OptionalCurrentUser
 from dependencies import SessionDep
 from models import Post
+from models.posts import PostStatus
 from schemas.posts import (
     PaginatedPostsResponse,
     PostCreate,
@@ -27,6 +28,7 @@ async def get_posts(
     # limit: Annotated[int, Query(ge=1, le=100)] = 10,
     query_params: Annotated[PostListParams, Query()],
 ) -> PaginatedPostsResponse:
+    "List all published posts"
     total_count = await post_service.count_posts(session, query_params)
     posts: Sequence[Post] = await post_service.list_posts(session, query_params)
 
@@ -44,14 +46,102 @@ async def get_posts(
 
 
 @router.get("/{post_id}", response_model=PostResponse, status_code=status.HTTP_200_OK)
-async def get_post(post_id: PostIdPathParam, session: SessionDep) -> Post:
+async def get_post(
+    post_id: PostIdPathParam,
+    session: SessionDep,
+    user: OptionalCurrentUser,
+) -> Post:
+    post_not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Post not found",
+    )
+    post = await post_service.get_post_for_response(session, post_id)
+    if not post:
+        raise post_not_found_exception
+
+    if post.status == PostStatus.PUBLISHED:
+        return post
+
+    if user is None or user.id != post.user_id:
+        raise post_not_found_exception
+
+    return post
+
+
+@router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+async def create_post(
+    post: PostCreate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> Post:
+    new_post = await post_service.create_post(session, post, user.id)
+    return new_post
+
+
+@router.post("/{post_id}/publish", response_model=PostResponse, status_code=status.HTTP_200_OK)
+async def publish_post(
+    post_id: PostIdPathParam,
+    session: SessionDep,
+    user: CurrentUser,
+) -> Post:
+    post_not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Post not found",
+    )
     existing_post = await post_service.get_post_for_response(session, post_id)
     if not existing_post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Post not found",
-        )
-    return existing_post
+        raise post_not_found_exception
+
+    if user.id != existing_post.user_id:
+        raise post_not_found_exception
+
+    if existing_post.status != PostStatus.DRAFT:
+        if existing_post.status == PostStatus.PUBLISHED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Post alrady published",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Archived posts cannot be published",
+            )
+
+    published_post = await post_service.publish_post(session, existing_post)
+    return published_post
+
+
+@router.post("/{post_id}/archive", response_model=PostResponse, status_code=status.HTTP_200_OK)
+async def archive_post(
+    post_id: PostIdPathParam,
+    session: SessionDep,
+    user: CurrentUser,
+) -> Post:
+    post_not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Post not found",
+    )
+    existing_post = await post_service.get_post_for_response(session, post_id)
+    if not existing_post:
+        raise post_not_found_exception
+
+    if user.id != existing_post.user_id:
+        raise post_not_found_exception
+
+    if existing_post.status != PostStatus.PUBLISHED:
+        if existing_post.status == PostStatus.ARCHIVED:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Post alrady archived",
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Draft posts cannot be archived",
+            )
+
+    archived_post = await post_service.archive_post(session, existing_post)
+    return archived_post
 
 
 @router.patch("/{post_id}", response_model=PostResponse, status_code=status.HTTP_200_OK)
@@ -96,16 +186,6 @@ async def update_post_full(
         )
     updated_post = await post_service.update_post(session, post, existing_post)
     return updated_post
-
-
-@router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
-async def create_post(
-    post: PostCreate,
-    session: SessionDep,
-    user: CurrentUser,
-) -> Post:
-    new_post = await post_service.create_post(session, post, user.id)
-    return new_post
 
 
 @router.delete("/{post_id}", status_code=status.HTTP_204_NO_CONTENT)

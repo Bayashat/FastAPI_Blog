@@ -29,6 +29,7 @@ from config import settings
 from database import AsyncSessionLocal, Base, async_engine
 from image_utils import PROFILE_PICS_DIR
 from models import Comment, Like, PasswordResetToken, Post, User
+from models.posts import PostStatus
 
 LOCAL_DATABASE_HOSTS = {"127.0.0.1", "::1", "localhost"}
 SEED_NAMESPACE = uuid.UUID("3ef73c58-1f53-4a89-b458-d68591149ce0")
@@ -312,6 +313,23 @@ def post_created_at(now: datetime, post_index: int, post_count: int) -> datetime
     return now - timedelta(days=days_ago)
 
 
+def post_status_for_index(post_index: int) -> PostStatus:
+    match post_index % 11:
+        case 9:
+            return PostStatus.DRAFT
+        case 10:
+            return PostStatus.ARCHIVED
+        case _:
+            return PostStatus.PUBLISHED
+
+
+def post_published_at(created_at: datetime, status: PostStatus) -> datetime | None:
+    if status is PostStatus.DRAFT:
+        return None
+
+    return created_at + timedelta(hours=6)
+
+
 def ensure_local_database() -> None:
     database_url = make_url(settings.database_url)
     if database_url.host not in LOCAL_DATABASE_HOSTS:
@@ -360,14 +378,18 @@ async def build_seed_data(now: datetime | None = None) -> SeedData:
     for post_index, post_seed in enumerate(post_seeds):
         author_index = 0 if post_index == 0 else (post_index - 1) % len(users)
         created_at = post_created_at(now, post_index, len(post_seeds))
+        status = post_status_for_index(post_index)
+        published_at = post_published_at(created_at, status)
         posts.append(
             Post(
                 id=seed_uuid("post", post_index),
                 title=post_seed["title"],
                 content=post_seed["content"],
                 user_id=users[author_index].id,
+                status=status,
+                published_at=published_at,
                 created_at=created_at,
-                updated_at=created_at,
+                updated_at=published_at or created_at,
             )
         )
 
