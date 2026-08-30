@@ -21,8 +21,18 @@ from services import posts as post_service
 router = APIRouter(prefix="/api/posts")
 
 
+@router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+async def create_post(
+    post: PostCreate,
+    session: SessionDep,
+    user: CurrentUser,
+) -> Post:
+    new_post = await post_service.create_post(session, post, user.id)
+    return new_post
+
+
 @router.get("", response_model=PaginatedPostsResponse, status_code=status.HTTP_200_OK)
-async def get_posts(
+async def list_posts(
     session: SessionDep,
     # skip: Annotated[int, Query(ge=0)] = 0,
     # limit: Annotated[int, Query(ge=1, le=100)] = 10,
@@ -66,16 +76,6 @@ async def get_post(
         raise post_not_found_exception
 
     return post
-
-
-@router.post("", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
-async def create_post(
-    post: PostCreate,
-    session: SessionDep,
-    user: CurrentUser,
-) -> Post:
-    new_post = await post_service.create_post(session, post, user.id)
-    return new_post
 
 
 @router.post("/{post_id}/publish", response_model=PostResponse, status_code=status.HTTP_200_OK)

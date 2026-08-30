@@ -1,6 +1,6 @@
 import uuid
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import Path
 from pydantic import (
@@ -9,8 +9,12 @@ from pydantic import (
     ConfigDict,
     Field,
     StringConstraints,
+    ValidationError,
+    ValidatorFunctionWrapHandler,
+    field_validator,
     model_validator,
 )
+from pydantic_core import PydanticCustomError
 
 from enums import PostStatus
 from schemas.common import UserId
@@ -96,6 +100,24 @@ class PostCreate(PostBase):
         PostStatus.DRAFT,
         PostStatus.PUBLISHED,
     ] = PostStatus.DRAFT
+
+    @field_validator("status", mode="wrap")
+    @classmethod
+    def validate_status(
+        cls,
+        value: Any,
+        handler: ValidatorFunctionWrapHandler,
+    ) -> PostStatus:
+        try:
+            validated_status = handler(value)
+        except ValidationError:
+            raise PydanticCustomError(
+                "post_status",
+                "Input should be 'draft' or 'published'",
+            ) from None
+
+        # cast is for mypy to understand that the return type is PostStatus, since handler(value) returns Any
+        return cast(PostStatus, validated_status)
 
 
 class PostUpdatePut(PostBase):

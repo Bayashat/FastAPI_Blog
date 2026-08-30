@@ -29,6 +29,14 @@ async def set_post_like_status(
             detail="Post not found!",
         )
 
+    is_owner = user.id == existing_post.user_id
+
+    if not is_owner and existing_post.status is not PostStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found!",
+        )
+
     # even the owner itself shouldn't set like state when post is in draft/archived status
     if existing_post.status is not PostStatus.PUBLISHED:
         raise HTTPException(

@@ -154,29 +154,31 @@ async def get_posts_by_user_id(
             with_expression(Post.likes_count, POST_LIKE_COUNT_EXPR),
         )
         .where(Post.user_id == user_id)
-        .order_by(
-            Post.published_at.desc(),
-            Post.id.desc(),
-        )
         .offset(skip)
         .limit(limit)
     )
-    if not is_owner:
-        stmt = stmt.where(Post.status == PostStatus.PUBLISHED)
-
+    if is_owner:
+        stmt = stmt.order_by(
+            Post.created_at.desc(),
+            Post.id.desc(),
+        )
+    else:
+        stmt = stmt.where(
+            Post.status == PostStatus.PUBLISHED,
+        ).order_by(
+            Post.published_at.desc(),
+            Post.id.desc(),
+        )
     return (await session.scalars(stmt)).all()
 
 
 async def create_post(session: AsyncSession, post_data: PostCreate, user_id: UserId) -> Post:
-    status = PostStatus(post_data.status.value)
-
     post = Post(
-        **post_data.model_dump(exclude={"status"}),
-        status=status,
+        **post_data.model_dump(),
         user_id=user_id,
     )
 
-    if status is PostStatus.PUBLISHED:
+    if post_data.status is PostStatus.PUBLISHED:
         post.published_at = datetime.now(UTC)
 
     session.add(post)
@@ -209,7 +211,8 @@ async def update_post(
     await session.commit()
 
     updated_post = await get_post_for_response(session, existing_post.id)
-    assert updated_post is not None
+    if updated_post is None:
+        raise RuntimeError("Updated post could not be loaded!")
 
     return updated_post
 

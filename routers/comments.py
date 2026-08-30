@@ -39,7 +39,7 @@ async def list_post_comments(
     if not post:
         raise post_not_found_exception
 
-    is_owner = user.id == post.user_id if user and post else False
+    is_owner = user.id == post.user_id if user else False
     if not is_owner and post.status is not PostStatus.PUBLISHED:
         raise post_not_found_exception
 
@@ -74,10 +74,18 @@ async def add_post_comment(
             detail="Post not found!",
         )
 
+    is_owner = user.id == existing_post.user_id
+
+    if not is_owner and existing_post.status is not PostStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found!",
+        )
+
     if existing_post.status is not PostStatus.PUBLISHED:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You cannnot add new comments to unpublished posts!",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You cannot add new comments to unpublished posts!",
         )
 
     new_comment = await comment_service.create_comment(session, post_id, user.id, comment)
