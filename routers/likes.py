@@ -23,11 +23,17 @@ async def set_post_like_status(
     like_data: PostLikeStateUpdate,
 ) -> like_service.PostLikeState:
     existing_post = await post_service.get_post_for_write(session, post_id)
+    if not existing_post:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found!",
+        )
+
     # even the owner itself shouldn't set like state when post is in draft/archived status
     if existing_post.status is not PostStatus.PUBLISHED:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="You cannot set like state to a unpublished post!",
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You cannot set like state to an unpublished post!",
         )
 
     try:

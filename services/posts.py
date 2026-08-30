@@ -101,11 +101,7 @@ async def list_posts(
     stmt = (
         stmt.order_by(
             sort_expression.desc() if filter_query.order_direction == "desc" else sort_expression.asc(),
-            (
-                PostSortField.CREATED_AT.desc()
-                if filter_query.order_direction == "desc"
-                else PostSortField.CREATED_AT.asc()
-            ),
+            (Post.created_at.desc() if filter_query.order_direction == "desc" else Post.created_at.asc()),
             Post.id.desc() if filter_query.order_direction == "desc" else Post.id.asc(),
         )
         .offset(filter_query.skip)

@@ -30,14 +30,18 @@ async def list_post_comments(
     post_id: PostIdPathParam,
     filter_query: Annotated[CommentListParams, Query()],
 ) -> ListCommentsResponse:
-    post = await post_service.get_post_for_response(session, post_id)
-    is_owner = user.id == post.user_id if user else False
+    post_not_found_exception = HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Post not found!",
+    )
 
+    post = await post_service.get_post_for_response(session, post_id)
+    if not post:
+        raise post_not_found_exception
+
+    is_owner = user.id == post.user_id if user and post else False
     if not is_owner and post.status is not PostStatus.PUBLISHED:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Post not found!",
-        )
+        raise post_not_found_exception
 
     total_count = await comment_service.count_comments(session, post_id)
     comments: Sequence[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
