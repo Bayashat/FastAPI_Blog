@@ -3,8 +3,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from auth import CurrentUser
+from auth import CurrentUser, OptionalCurrentUser
 from dependencies import SessionDep
+from enums import PostStatus
 from models import Comment
 from schemas.comments import (
     CommentCreateRequest,
@@ -25,9 +26,19 @@ comments_router = APIRouter(prefix="/api/comments")
 @post_comments_router.get("", response_model=ListCommentsResponse, status_code=status.HTTP_200_OK)
 async def list_post_comments(
     session: SessionDep,
+    user: OptionalCurrentUser,
     post_id: PostIdPathParam,
     filter_query: Annotated[CommentListParams, Query()],
 ) -> ListCommentsResponse:
+    post = await post_service.get_post_for_response(session, post_id)
+    is_owner = user.id == post.user_id if user else False
+
+    if not is_owner and post.status is not PostStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found!",
+        )
+
     total_count = await comment_service.count_comments(session, post_id)
     comments: Sequence[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
 
@@ -51,11 +62,18 @@ async def add_post_comment(
     user: CurrentUser,
     comment: CommentCreateRequest,
 ) -> Comment:
-    post_exists = await post_service.get_post_for_write(session, post_id)
-    if not post_exists:
+    existing_post = await post_service.get_post_for_write(session, post_id)
+
+    if not existing_post:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Post not found!",
+        )
+
+    if existing_post.status is not PostStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You cannnot add new comments to unpublished posts!",
         )
 
     new_comment = await comment_service.create_comment(session, post_id, user.id, comment)

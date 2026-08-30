@@ -12,7 +12,7 @@ from pydantic import (
     model_validator,
 )
 
-from models.posts import PostStatus
+from enums import PostStatus
 from schemas.common import UserId
 from schemas.users import UserPublic
 
@@ -91,13 +91,11 @@ class PostBase(BaseModel):
     content: PostContent
 
 
-class CreatePostStatus(StrEnum):
-    DRAFT = "draft"
-    PUBLISHED = "published"
-
-
 class PostCreate(PostBase):
-    status: CreatePostStatus = CreatePostStatus.DRAFT
+    status: Literal[
+        PostStatus.DRAFT,
+        PostStatus.PUBLISHED,
+    ] = PostStatus.DRAFT
 
 
 class PostUpdatePut(PostBase):

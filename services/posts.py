@@ -8,10 +8,10 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, with_expression
 
+from enums import PostStatus
 from models import Post
 from models.comments import Comment
 from models.likes import Like
-from models.posts import PostStatus
 from models.users import User
 from schemas.common import UserId
 from schemas.posts import (
@@ -30,6 +30,7 @@ POST_COMMENT_COUNT_EXPR = (
     .scalar_subquery()
     .label("comments_count")
 )
+
 POST_LIKE_COUNT_EXPR = (
     select(func.count())
     .select_from(Like)
@@ -100,6 +101,11 @@ async def list_posts(
     stmt = (
         stmt.order_by(
             sort_expression.desc() if filter_query.order_direction == "desc" else sort_expression.asc(),
+            (
+                PostSortField.CREATED_AT.desc()
+                if filter_query.order_direction == "desc"
+                else PostSortField.CREATED_AT.asc()
+            ),
             Post.id.desc() if filter_query.order_direction == "desc" else Post.id.asc(),
         )
         .offset(filter_query.skip)
@@ -240,7 +246,14 @@ async def check_post_exists(session: AsyncSession, post_id: PostId) -> bool:
     return (await session.execute(stmt)).scalar_one()
 
 
+class InvalidPostTransitionError(Exception):
+    pass
+
+
 async def publish_post(session: AsyncSession, post: Post) -> Post:
+    if post.status != PostStatus.DRAFT:
+        raise InvalidPostTransitionError
+
     post.status = PostStatus.PUBLISHED
     post.published_at = datetime.now(UTC)
 
@@ -254,6 +267,9 @@ async def publish_post(session: AsyncSession, post: Post) -> Post:
 
 
 async def archive_post(session: AsyncSession, post: Post) -> Post:
+    if post.status != PostStatus.PUBLISHED:
+        raise InvalidPostTransitionError
+
     post.status = PostStatus.ARCHIVED
 
     await session.commit()

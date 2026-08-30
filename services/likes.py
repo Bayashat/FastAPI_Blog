@@ -31,7 +31,7 @@ async def set_post_like_state(
     try:
         post_exists = await check_post_exists(session, post_id)
 
-        if post_exists is None:
+        if not post_exists:
             raise PostNotFoundError
 
         if liked:

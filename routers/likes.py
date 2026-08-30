@@ -2,9 +2,11 @@ from fastapi import APIRouter, HTTPException, status
 
 from auth import CurrentUser
 from dependencies import SessionDep
+from enums import PostStatus
 from schemas.likes import PostLikeStateResponse, PostLikeStateUpdate
 from schemas.posts import PostIdPathParam
 from services import likes as like_service
+from services import posts as post_service
 
 router = APIRouter(prefix="/api/posts/{post_id}")
 
@@ -20,6 +22,14 @@ async def set_post_like_status(
     post_id: PostIdPathParam,
     like_data: PostLikeStateUpdate,
 ) -> like_service.PostLikeState:
+    existing_post = await post_service.get_post_for_write(session, post_id)
+    # even the owner itself shouldn't set like state when post is in draft/archived status
+    if existing_post.status is not PostStatus.PUBLISHED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="You cannot set like state to a unpublished post!",
+        )
+
     try:
         return await like_service.set_post_like_state(
             session=session,

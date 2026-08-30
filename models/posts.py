@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, Uuid, func
@@ -12,17 +11,12 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column, query_expression, relationship
 
 from database import Base
+from enums import PostStatus
 
 if TYPE_CHECKING:
     from models.comments import Comment
     from models.likes import Like
     from models.users import User
-
-
-class PostStatus(StrEnum):
-    DRAFT = "draft"
-    PUBLISHED = "published"
-    ARCHIVED = "archived"
 
 
 class Post(Base):

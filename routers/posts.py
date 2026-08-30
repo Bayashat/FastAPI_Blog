@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from auth import CurrentUser, OptionalCurrentUser
 from dependencies import SessionDep
+from enums import PostStatus
 from models import Post
-from models.posts import PostStatus
 from schemas.posts import (
     PaginatedPostsResponse,
     PostCreate,
@@ -59,7 +59,7 @@ async def get_post(
     if not post:
         raise post_not_found_exception
 
-    if post.status == PostStatus.PUBLISHED:
+    if post.status is PostStatus.PUBLISHED:
         return post
 
     if user is None or user.id != post.user_id:
@@ -88,26 +88,21 @@ async def publish_post(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Post not found",
     )
-    existing_post = await post_service.get_post_for_response(session, post_id)
+    existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise post_not_found_exception
 
     if user.id != existing_post.user_id:
         raise post_not_found_exception
 
-    if existing_post.status != PostStatus.DRAFT:
-        if existing_post.status == PostStatus.PUBLISHED:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Post alrady published",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Archived posts cannot be published",
-            )
+    try:
+        published_post = await post_service.publish_post(session, existing_post)
+    except post_service.InvalidPostTransitionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only draft posts can be published!",
+        ) from err
 
-    published_post = await post_service.publish_post(session, existing_post)
     return published_post
 
 
@@ -121,26 +116,19 @@ async def archive_post(
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Post not found",
     )
-    existing_post = await post_service.get_post_for_response(session, post_id)
+    existing_post = await post_service.get_post_for_write(session, post_id)
     if not existing_post:
         raise post_not_found_exception
 
     if user.id != existing_post.user_id:
         raise post_not_found_exception
-
-    if existing_post.status != PostStatus.PUBLISHED:
-        if existing_post.status == PostStatus.ARCHIVED:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Post alrady archived",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Draft posts cannot be archived",
-            )
-
-    archived_post = await post_service.archive_post(session, existing_post)
+    try:
+        archived_post = await post_service.archive_post(session, existing_post)
+    except post_service.InvalidPostTransitionError as err:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only published posts can be archived!",
+        ) from err
     return archived_post
 
 

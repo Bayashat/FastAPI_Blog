@@ -18,6 +18,7 @@ from starlette.responses import Response
 from config import settings
 from database import async_engine
 from dependencies import SessionDep
+from enums import PostStatus
 from middleware import RequestBodySizeLimitMiddleware
 from models import Post
 from routers import comments, likes, posts, users
@@ -171,7 +172,7 @@ async def home(request: Request, session: SessionDep) -> Response:
 @app.get("/posts/{post_id}", include_in_schema=False, name="post")
 async def post_page(post_id: uuid.UUID, request: Request, session: SessionDep) -> Response:
     post = await posts_service.get_post_for_response(session, post_id)
-    if post:
+    if post and post.status is PostStatus.PUBLISHED:
         return templates.TemplateResponse(request, "post.html", {"post": post, "title": post.title})
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Post not found")
 
