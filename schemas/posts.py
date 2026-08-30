@@ -156,10 +156,12 @@ class PostResponse(PostBase):
 
     @model_validator(mode="after")
     def validate_status_published_at(self) -> "PostResponse":
-        if (self.published_at) and (self.status is not PostStatus.PUBLISHED):
-            raise ValueError("Non-published post cannot have published_at field")
-        elif (self.published_at is None) and (self.status is PostStatus.PUBLISHED):
-            raise ValueError("Published post must have published_at field")
+        if self.status is PostStatus.DRAFT:
+            if self.published_at is not None:
+                raise ValueError("Draft post cannot have published_at")
+        else:
+            if self.published_at is None:
+                raise ValueError("Published or archived post must have published_at")
 
         return self
 

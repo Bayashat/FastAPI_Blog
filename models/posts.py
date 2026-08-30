@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, Uuid, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, Uuid, func
 from sqlalchemy import Enum as SAEnum
 
 # from sqlalchemy import UUID, text
@@ -64,6 +64,17 @@ class Post(Base):
     likes_count: Mapped[int | None] = query_expression()
 
     __table_args__ = (
+        CheckConstraint(
+            """
+            (status = 'draft' AND published_at IS NULL)
+            OR
+            (
+                status IN ('published', 'archived')
+                AND published_at IS NOT NULL
+            )
+            """,
+            name="status_published_at_consistency",
+        ),
         Index("ix_posts_user_id_created_at_id", user_id, created_at.desc(), id.desc()),
         Index("ix_posts_status_published_at_id", status, published_at.desc(), id.desc()),
         Index("ix_posts_created_at_id", created_at.desc(), id.desc()),
