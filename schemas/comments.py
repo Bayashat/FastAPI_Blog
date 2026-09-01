@@ -1,9 +1,10 @@
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated
 
 from fastapi import Path
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
+from commons import ListQueryParamsBase
 from schemas.posts import PostId
 from schemas.users import UserPublic
 
@@ -19,14 +20,8 @@ CommentContent = Annotated[
 ]
 
 
-class CommentListParams(BaseModel):
-    limit: int = Field(10, ge=1, le=100, description="Maximum number of elements to return")
-    skip: int = Field(0, ge=0, description="Number of elements to skip before starting to collect the result set")
-    order_direction: Literal["asc", "desc"] = Field(
-        "desc", description="Direction of ordering by created_at: ascending or descending"
-    )
-
-    model_config = ConfigDict(extra="forbid")
+class CommentListParams(ListQueryParamsBase):
+    pass
 
 
 class CommentResponse(BaseModel):

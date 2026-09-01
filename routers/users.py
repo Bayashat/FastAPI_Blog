@@ -323,7 +323,33 @@ async def delete_user_picture(
     return updated_user
 
 
-@router.get("/{user_id}/posts", response_model=UserPostsResponse)
+@router.get("/me/posts", response_model=UserPostsResponse, status_code=status.HTTP_200_OK)
+async def get_my_posts(
+    session: SessionDep,
+    user: CurrentUser,
+    skip: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
+) -> UserPostsResponse:
+    total_count = await post_service.count_posts_by_user_id(session, user.id, is_owner=True)
+    user_posts: Sequence[Post] = await post_service.get_posts_by_user_id(
+        session, user.id, is_owner=True, skip=skip, limit=limit
+    )
+
+    has_more = skip + len(user_posts) < total_count
+
+    return UserPostsResponse.model_validate(
+        {
+            "user": user,
+            "posts": user_posts,
+            "total": total_count,
+            "skip": skip,
+            "limit": limit,
+            "has_more": has_more,
+        }
+    )
+
+
+@router.get("/{user_id}/posts", response_model=UserPostsResponse, status_code=status.HTTP_200_OK)
 async def get_user_posts(
     user_id: UserId,
     session: SessionDep,

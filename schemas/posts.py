@@ -17,13 +17,10 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 from enums import PostStatus
-from schemas.common import UserId
+from schemas.common import PostId, UserId
+from schemas.tags import PostTagResponse, TagName, TagResponse
 from schemas.users import UserPublic
 
-PostId = Annotated[
-    uuid.UUID,
-    Field(title="Post ID", description="The unique identifier of the post"),
-]
 PostTitle = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
@@ -133,12 +130,19 @@ class PostUpdatePatch(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         json_schema_extra={
-            "examples": [{"title": "Updated Title", "content": "Updated content"}],
+            "examples": [
+                {
+                    "title": "Updated Title",
+                    "content": "Updated content",
+                    "tags": ["travel", "math"],
+                }
+            ],
         },
     )
 
     title: PostTitle | None = None
     content: PostContent | None = None
+    tags: list[TagName] | None = Field(default=None, min_length=0, max_length=10)
 
     @model_validator(mode="before")
     @classmethod
@@ -146,13 +150,13 @@ class PostUpdatePatch(BaseModel):
         if not isinstance(data, dict):
             return data
 
-        fields = {"title", "content"}
+        fields = {"title", "content", "tags"}
         provided_fields = fields & data.keys()
 
         if not provided_fields:
             raise ValueError("At least one field must be provided")
 
-        null_fields = [field for field in provided_fields if data[field] is None]
+        null_fields = [field for field in provided_fields if data[field] is None and field != "tags"]
         if null_fields:
             raise ValueError(f"Fields cannot be null: {', '.join(null_fields)}")
 
@@ -173,6 +177,7 @@ class PostResponse(PostBase):
     likes_count: int
 
     author: UserPublic | None
+    tags: list[TagResponse]
 
     @model_validator(mode="after")
     def validate_status_published_at(self) -> "PostResponse":
@@ -236,6 +241,8 @@ class UserPostItem(PostBase):
 
     comments_count: int
     likes_count: int
+
+    tag_links: list[PostTagResponse]
 
 
 class UserPostsResponse(BaseModel):

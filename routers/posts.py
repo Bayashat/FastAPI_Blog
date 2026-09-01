@@ -150,7 +150,7 @@ async def update_post_patch(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this post",
         )
-    updated_post = await post_service.update_post(session, new_post_data, existing_post)
+    updated_post = await post_service.update_post(session, new_post_data, existing_post, user.id)
     return updated_post
 
 

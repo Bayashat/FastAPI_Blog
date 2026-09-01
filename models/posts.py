@@ -16,6 +16,8 @@ from enums import PostStatus
 if TYPE_CHECKING:
     from models.comments import Comment
     from models.likes import Like
+    from models.post_tags import PostTag
+    from models.tags import Tag
     from models.users import User
 
 
@@ -47,7 +49,7 @@ class Post(Base):
     #     server_default=text("'{}'::jsonb"),
     # )
 
-    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="SET NULL"))
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -56,6 +58,10 @@ class Post(Base):
 
     comments_count: Mapped[int | None] = query_expression()
     likes_count: Mapped[int | None] = query_expression()
+
+    @property
+    def tags(self) -> list[Tag]:
+        return [link.tag for link in self.tag_links]
 
     __table_args__ = (
         CheckConstraint(
@@ -84,6 +90,11 @@ class Post(Base):
         passive_deletes=True,
     )
     comments: Mapped[list[Comment]] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    tag_links: Mapped[list[PostTag]] = relationship(
         back_populates="post",
         cascade="all, delete-orphan",
         passive_deletes=True,

@@ -50,7 +50,10 @@ async def list_post_comments(
     return (await session.scalars(stmt)).all()
 
 
-async def count_comments(session: AsyncSession, post_id: PostIdPathParam) -> int:
+async def count_comments(
+    session: AsyncSession,
+    post_id: PostIdPathParam,
+) -> int:
     stmt = (
         select(func.count())
         .select_from(

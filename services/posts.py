@@ -6,12 +6,14 @@ from typing import Any
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, with_expression
+from sqlalchemy.orm import joinedload, selectinload, with_expression
 
 from enums import PostStatus
 from models import Post
 from models.comments import Comment
 from models.likes import Like
+from models.post_tags import PostTag
+from models.tags import Tag
 from models.users import User
 from schemas.common import UserId
 from schemas.posts import (
@@ -22,6 +24,7 @@ from schemas.posts import (
     PostUpdatePatch,
     PostUpdatePut,
 )
+from services import tags as tag_service
 
 POST_COMMENT_COUNT_EXPR = (
     select(func.count(Comment.id))
@@ -86,6 +89,7 @@ async def list_posts(
             User.username,
             User.image_file,
         ),
+        selectinload(Post.tag_links).joinedload(PostTag.tag),
         with_expression(
             Post.comments_count,
             POST_COMMENT_COUNT_EXPR,
@@ -120,6 +124,7 @@ async def get_post_for_response(session: AsyncSession, post_id: PostId) -> Post 
                 User.username,
                 User.image_file,
             ),
+            selectinload(Post.tag_links).joinedload(PostTag.tag),
             with_expression(
                 Post.comments_count,
                 POST_COMMENT_COUNT_EXPR,
@@ -150,6 +155,7 @@ async def get_posts_by_user_id(
     stmt = (
         select(Post)
         .options(
+            selectinload(Post.tag_links),
             with_expression(Post.comments_count, POST_COMMENT_COUNT_EXPR),
             with_expression(Post.likes_count, POST_LIKE_COUNT_EXPR),
         )
@@ -196,17 +202,40 @@ async def update_post(
     session: AsyncSession,
     post_data: PostUpdatePut | PostUpdatePatch,
     existing_post: Post,
+    user_id: UserId,
 ) -> Post:
     if isinstance(post_data, PostUpdatePatch):
+        tags = post_data.tags if post_data.tags else None
         update_data = post_data.model_dump(
-            exclude_none=True,
             exclude_unset=True,
+            exclude={"tags"},
         )
     else:
+        tags = []
         update_data = post_data.model_dump()
 
     for key, value in update_data.items():
         setattr(existing_post, key, value)
+
+    if tags:
+        # 这里不管是否已存在,直接全扔给tag service来处理已存在的tag跳过
+        await tag_service.add_new_tags(session, tags)
+
+        existing_post_tags: list[PostTag] = await tag_service.get_post_tags_by_post_id(session, existing_post.id)
+        existing_post_tag_ids = [post_tag.tag_id for post_tag in existing_post_tags]
+
+        new_tags: list[Tag] = await tag_service.get_tags_by_names(session, tags)
+
+        adds = set(tag.id for tag in new_tags) - set(existing_post_tag_ids)
+        removes = set(existing_post_tag_ids) - set(tag.id for tag in new_tags)
+
+        await tag_service.add_post_tags(
+            session=session,
+            post_id=existing_post.id,
+            added_by_user_id=user_id,
+            adds=adds,
+            removes=removes,
+        )
 
     await session.commit()
 

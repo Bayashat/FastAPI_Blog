@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -28,7 +27,7 @@ async def list_post_comments(
     session: SessionDep,
     user: OptionalCurrentUser,
     post_id: PostIdPathParam,
-    filter_query: Annotated[CommentListParams, Query()],
+    query_params: Annotated[CommentListParams, Query()],
 ) -> ListCommentsResponse:
     post_not_found_exception = HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
@@ -44,16 +43,16 @@ async def list_post_comments(
         raise post_not_found_exception
 
     total_count = await comment_service.count_comments(session, post_id)
-    comments: Sequence[Comment] = await comment_service.list_post_comments(session, post_id, filter_query)
+    comments: list[Comment] = await comment_service.list_post_comments(session, post_id, query_params)
 
-    has_more = filter_query.skip + len(comments) < total_count
+    has_more = query_params.skip + len(comments) < total_count
 
     return ListCommentsResponse.model_validate(
         {
             "comments": comments,
             "total": total_count,
-            "skip": filter_query.skip,
-            "limit": filter_query.limit,
+            "skip": query_params.skip,
+            "limit": query_params.limit,
             "has_more": has_more,
         }
     )
