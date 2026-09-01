@@ -17,6 +17,7 @@ from schemas.posts import (
     PostUpdatePut,
 )
 from services import posts as post_service
+from services import tags as tag_service
 
 router = APIRouter(prefix="/api/posts")
 
@@ -150,7 +151,14 @@ async def update_post_patch(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this post",
         )
-    updated_post = await post_service.update_post(session, new_post_data, existing_post, user.id)
+    try:
+        updated_post = await post_service.update_post(session, new_post_data, existing_post, user.id)
+    except tag_service.PostTagLimitExceededError as err:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(err),
+        ) from err
+
     return updated_post
 
 
@@ -172,7 +180,7 @@ async def update_post_full(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this post",
         )
-    updated_post = await post_service.update_post(session, post, existing_post)
+    updated_post = await post_service.update_post(session, post, existing_post, user.id)
     return updated_post
 
 

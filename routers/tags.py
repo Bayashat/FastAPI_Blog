@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, Query, status
@@ -18,9 +19,9 @@ router = APIRouter(prefix="/api/tags")
 async def get_all_tags(
     session: SessionDep,
     query_params: Annotated[TagListParams, Query()],
-) -> list[Tag]:
+) -> ListTagResponse:
     total_count = await tag_service.count_tags(session)
-    tags: list[Tag] = await tag_service.list_tags(session, query_params)
+    tags: Sequence[Tag] = await tag_service.list_tags(session, query_params)
 
     has_more = (query_params.skip + len(tags)) < total_count
 

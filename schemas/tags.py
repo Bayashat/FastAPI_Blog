@@ -39,7 +39,7 @@ class PostTagResponse(BaseModel):
 
     post_id: PostId
     tag_id: TagId
-    added_by_user_id: UserId
+    added_by_user_id: UserId | None
     added_at: AwareDatetime
 
 

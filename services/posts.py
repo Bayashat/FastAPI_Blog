@@ -13,7 +13,6 @@ from models import Post
 from models.comments import Comment
 from models.likes import Like
 from models.post_tags import PostTag
-from models.tags import Tag
 from models.users import User
 from schemas.common import UserId
 from schemas.posts import (
@@ -89,6 +88,10 @@ async def list_posts(
             User.username,
             User.image_file,
         ),
+        # 2 queries: SELECT ... FROM posts WHERE ...
+        # +
+        # SELECT post_tags.*, tags.* FROM post_tags LEFT JOIN tags ...
+        # WHERE post_tags.post_id in (P1.id, P2.id)
         selectinload(Post.tag_links).joinedload(PostTag.tag),
         with_expression(
             Post.comments_count,
@@ -101,6 +104,7 @@ async def list_posts(
     )
     # add filters
     stmt = apply_post_filters(stmt, filter_query)
+
     # sorting, pagination
     stmt = (
         stmt.order_by(
@@ -155,7 +159,7 @@ async def get_posts_by_user_id(
     stmt = (
         select(Post)
         .options(
-            selectinload(Post.tag_links),
+            selectinload(Post.tag_links).joinedload(PostTag.tag),
             with_expression(Post.comments_count, POST_COMMENT_COUNT_EXPR),
             with_expression(Post.likes_count, POST_LIKE_COUNT_EXPR),
         )
@@ -205,36 +209,27 @@ async def update_post(
     user_id: UserId,
 ) -> Post:
     if isinstance(post_data, PostUpdatePatch):
-        tags = post_data.tags if post_data.tags else None
+        tags_were_provided = "tags" in post_data.model_fields_set
+        requested_tags = post_data.tags
+
         update_data = post_data.model_dump(
             exclude_unset=True,
             exclude={"tags"},
         )
     else:
-        tags = []
+        tags_were_provided = False
+        requested_tags = None
         update_data = post_data.model_dump()
 
     for key, value in update_data.items():
         setattr(existing_post, key, value)
 
-    if tags:
-        # 这里不管是否已存在,直接全扔给tag service来处理已存在的tag跳过
-        await tag_service.add_new_tags(session, tags)
-
-        existing_post_tags: list[PostTag] = await tag_service.get_post_tags_by_post_id(session, existing_post.id)
-        existing_post_tag_ids = [post_tag.tag_id for post_tag in existing_post_tags]
-
-        new_tags: list[Tag] = await tag_service.get_tags_by_names(session, tags)
-
-        adds = set(tag.id for tag in new_tags) - set(existing_post_tag_ids)
-        removes = set(existing_post_tag_ids) - set(tag.id for tag in new_tags)
-
-        await tag_service.add_post_tags(
+    if tags_were_provided:
+        await tag_service.sync_post_tags(
             session=session,
             post_id=existing_post.id,
+            tag_names=requested_tags,
             added_by_user_id=user_id,
-            adds=adds,
-            removes=removes,
         )
 
     await session.commit()

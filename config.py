@@ -13,7 +13,11 @@ class Settings(BaseSettings):
 
     max_upload_size_bytes: int = 5 * 1024 * 1024
 
+    # Pagination settings
     posts_per_page: int = 10
+
+    # Tagging settings
+    post_tag_limit: int = 50
 
     # Email config settings
     reset_token_expire_minutes: int = 1 * 60

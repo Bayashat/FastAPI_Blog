@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
@@ -43,7 +44,7 @@ async def list_post_comments(
         raise post_not_found_exception
 
     total_count = await comment_service.count_comments(session, post_id)
-    comments: list[Comment] = await comment_service.list_post_comments(session, post_id, query_params)
+    comments: Sequence[Comment] = await comment_service.list_post_comments(session, post_id, query_params)
 
     has_more = query_params.skip + len(comments) < total_count
 

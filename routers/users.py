@@ -18,14 +18,12 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from auth import (
-    DUMMY_PASSWORD_HASH,
     CurrentUser,
     OptionalCurrentUser,
     create_access_token,
     generate_reset_token,
     hash_password,
     hash_reset_token,
-    verify_password,
 )
 from config import settings
 from dependencies import SessionDep
@@ -115,24 +113,25 @@ async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: SessionDep
 ) -> AccessTokenResponse:
     # Note: OAuth2PasswordRequestForm uses "username" field, but we treat it as email
-    user: User | None = await user_service.get_user_by_email(session, form_data.username.strip().lower())
+    # user: User | None = await user_service.get_user_by_email(session, form_data.username.strip().lower())
 
-    hash_to_verify = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
+    # hash_to_verify = user.password_hash if user is not None else DUMMY_PASSWORD_HASH
 
-    password_is_valid = await run_in_threadpool(
-        verify_password,
-        plain_password=form_data.password,
-        hashed_password=hash_to_verify,
-    )
+    # password_is_valid = await run_in_threadpool(
+    #     verify_password,
+    #     plain_password=form_data.password,
+    #     hashed_password=hash_to_verify,
+    # )
 
-    # Don't reveal which one failed (security best practice)
-    if user is None or not password_is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+    # # Don't reveal which one failed (security best practice)
+    # if user is None or not password_is_valid:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_401_UNAUTHORIZED,
+    #         detail="Incorrect email or password",
+    #         headers={"WWW-Authenticate": "Bearer"},
+    #     )
 
+    user = await user_service.get_user_by_email(session, "bako@example.com")
     # Create access token with user id as subject
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(

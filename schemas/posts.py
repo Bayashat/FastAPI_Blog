@@ -18,7 +18,7 @@ from pydantic_core import PydanticCustomError
 
 from enums import PostStatus
 from schemas.common import PostId, UserId
-from schemas.tags import PostTagResponse, TagName, TagResponse
+from schemas.tags import TagName, TagResponse
 from schemas.users import UserPublic
 
 PostTitle = Annotated[
@@ -142,7 +142,7 @@ class PostUpdatePatch(BaseModel):
 
     title: PostTitle | None = None
     content: PostContent | None = None
-    tags: list[TagName] | None = Field(default=None, min_length=0, max_length=10)
+    tags: list[TagName] | None = Field(default=None, min_length=0, max_length=50)
 
     @model_validator(mode="before")
     @classmethod
@@ -156,7 +156,7 @@ class PostUpdatePatch(BaseModel):
         if not provided_fields:
             raise ValueError("At least one field must be provided")
 
-        null_fields = [field for field in provided_fields if data[field] is None and field != "tags"]
+        null_fields = [field for field in provided_fields if data[field] is None]
         if null_fields:
             raise ValueError(f"Fields cannot be null: {', '.join(null_fields)}")
 
@@ -242,7 +242,7 @@ class UserPostItem(PostBase):
     comments_count: int
     likes_count: int
 
-    tag_links: list[PostTagResponse]
+    tags: list[TagResponse]
 
 
 class UserPostsResponse(BaseModel):
