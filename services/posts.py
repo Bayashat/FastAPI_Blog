@@ -13,6 +13,7 @@ from models import Post
 from models.comments import Comment
 from models.likes import Like
 from models.post_tags import PostTag
+from models.tags import Tag
 from models.users import User
 from schemas.common import UserId
 from schemas.posts import (
@@ -65,6 +66,15 @@ def apply_post_filters[SelectRow: tuple[Any, ...]](
 
     if filters.q:
         stmt = stmt.where(Post.title.ilike(f"%{filters.q}%") | Post.content.ilike(f"%{filters.q}%"))
+
+    if filters.tags:
+        stmt = stmt.where(
+            Post.tag_links.any(
+                PostTag.tag.has(
+                    Tag.name.in_(filters.tags),
+                )
+            )
+        )
 
     if filters.created_from is not None:
         stmt = stmt.where(Post.created_at >= filters.created_from)

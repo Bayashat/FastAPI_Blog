@@ -59,6 +59,13 @@ class PostListParams(BaseModel):
         examples=["fastapi"],
     )
 
+    tags: list[TagName] | None = Field(
+        default=None,
+        description="Filter posts by tags. Only posts that have all specified tags will be returned.",
+        min_length=0,
+        examples=[["python", "fastapi"]],
+    )
+
     created_from: AwareDatetime | None = Field(
         default=None,
         description="Filter posts created from this date, inclusive",
@@ -69,8 +76,6 @@ class PostListParams(BaseModel):
         description="Filter posts created before this date, exclusive",
         examples=["2024-12-31T23:59:59Z"],
     )
-
-    # tags: list[str] = []
 
     model_config = ConfigDict(extra="forbid")
 
