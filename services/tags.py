@@ -18,18 +18,7 @@ TAG_SORT_EXPRESSIONS = {
 }
 
 
-async def list_tags(
-    session: AsyncSession,
-    query_params: TagListParams,
-) -> Sequence[Tag]:
-    sort_column = TAG_SORT_EXPRESSIONS.get(query_params.order_by, Tag.name)
-
-    """
-    Tag 可以显示, 如果:
-    1. 它完全没被任何 Post 使用
-    或者
-    2. 至少有一个 Published Post 使用它
-    """
+def tag_is_visible():
     is_unused = ~Tag.post_links.any()
 
     has_published_post = Tag.post_links.any(
@@ -38,11 +27,24 @@ async def list_tags(
         )
     )
 
-    visible_tags = or_(is_unused, has_published_post)
+    return or_(is_unused, has_published_post)
 
+
+async def list_tags(
+    session: AsyncSession,
+    query_params: TagListParams,
+) -> Sequence[Tag]:
+    sort_column = TAG_SORT_EXPRESSIONS[query_params.order_by]
+
+    """
+    Tag 可以显示, 如果:
+    1. 它完全没被任何 Post 使用
+    或者
+    2. 至少有一个 Published Post 使用它
+    """
     stmt = (
         select(Tag)
-        .where(visible_tags)
+        .where(tag_is_visible())
         .order_by(
             sort_column.desc() if query_params.order_direction == "desc" else sort_column.asc(),
             Tag.id.desc() if query_params.order_direction == "desc" else Tag.id.asc(),
@@ -57,22 +59,12 @@ async def list_tags(
 async def count_tags(
     session: AsyncSession,
 ) -> int:
-    is_unused = ~Tag.post_links.any()
-
-    has_published_post = Tag.post_links.any(
-        PostTag.post.has(
-            Post.status == PostStatus.PUBLISHED,
-        )
-    )
-
-    visible_tags = or_(is_unused, has_published_post)
-
     stmt = (
         select(
             func.count(),
         )
         .select_from(Tag)
-        .where(visible_tags)
+        .where(tag_is_visible())
     )
     return (await session.execute(stmt)).scalar_one()
 
@@ -84,11 +76,9 @@ async def ensure_tags_exist(
     if not names:
         return
 
-    unique_names = list(dict.fromkeys(names))
-
     stmt = (
         insert(Tag)
-        .values([{"name": name} for name in unique_names])
+        .values([{"name": name} for name in names])
         .on_conflict_do_nothing(
             index_elements=[func.lower(Tag.name)],
         )

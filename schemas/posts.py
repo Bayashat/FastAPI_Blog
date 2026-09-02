@@ -168,6 +168,13 @@ class PostUpdatePatch(BaseModel):
 
         return data
 
+    @field_validator("tags")
+    @classmethod
+    def validate_tags_unique(cls, tags: list[TagName]) -> list[TagName]:
+        if len(set(tags)) != len(tags):
+            raise ValueError("Duplicate tags are not allowed")
+        return tags
+
 
 class PostResponse(PostBase):
     model_config = ConfigDict(from_attributes=True)

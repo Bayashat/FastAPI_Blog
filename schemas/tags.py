@@ -26,6 +26,9 @@ class TagListParams(ListQueryParamsBase):
         default="name",
         description="Field used to order tags",
     )
+    order_direction: Literal["asc", "desc"] = Field(
+        default="asc", description="Direction of ordering by created_at: ascending or descending"
+    )
 
 
 class TagResponse(BaseModel):

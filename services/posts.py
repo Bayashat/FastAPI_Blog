@@ -68,13 +68,15 @@ def apply_post_filters[SelectRow: tuple[Any, ...]](
         stmt = stmt.where(Post.title.ilike(f"%{filters.q}%") | Post.content.ilike(f"%{filters.q}%"))
 
     if filters.tags:
-        stmt = stmt.where(
-            Post.tag_links.any(
-                PostTag.tag.has(
-                    Tag.name.in_(filters.tags),
+        # 连续的where 会 AND
+        for tag_name in filters.tags:
+            stmt = stmt.where(
+                Post.tag_links.any(
+                    PostTag.tag.has(
+                        Tag.name == tag_name,
+                    )
                 )
             )
-        )
 
     if filters.created_from is not None:
         stmt = stmt.where(Post.created_at >= filters.created_from)
