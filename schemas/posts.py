@@ -16,6 +16,7 @@ from pydantic import (
 )
 from pydantic_core import PydanticCustomError
 
+from config import settings
 from enums import PostStatus
 from schemas.common import PostId, UserId
 from schemas.tags import TagName, TagResponse
@@ -142,7 +143,7 @@ class PostUpdatePatch(BaseModel):
 
     title: PostTitle | None = None
     content: PostContent | None = None
-    tags: list[TagName] | None = Field(default=None, min_length=0, max_length=50)
+    tags: list[TagName] | None = Field(default=None, min_length=0, max_length=settings.post_tag_limit)
 
     @model_validator(mode="before")
     @classmethod

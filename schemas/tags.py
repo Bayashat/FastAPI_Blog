@@ -1,10 +1,9 @@
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
 from commons import ListQueryParamsBase
-from schemas.common import PostId, UserId
 
 TagId = Annotated[
     uuid.UUID,
@@ -23,7 +22,10 @@ TagName = Annotated[
 
 
 class TagListParams(ListQueryParamsBase):
-    pass
+    order_by: Literal["name", "created_at"] = Field(
+        default="name",
+        description="Field used to order tags",
+    )
 
 
 class TagResponse(BaseModel):
@@ -34,16 +36,7 @@ class TagResponse(BaseModel):
     created_at: AwareDatetime
 
 
-class PostTagResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    post_id: PostId
-    tag_id: TagId
-    added_by_user_id: UserId | None
-    added_at: AwareDatetime
-
-
-class ListTagResponse(BaseModel):
+class PaginatedTagsResponse(BaseModel):
     tags: list[TagResponse]
     total: int
     skip: int

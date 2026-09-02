@@ -25,5 +25,4 @@ async def create_reset_token(
 
 async def get_reset_token_by_hash(session: AsyncSession, token_hash: str) -> PasswordResetToken | None:
     stmt = select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return await session.scalar(stmt)

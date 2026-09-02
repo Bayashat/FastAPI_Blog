@@ -141,8 +141,7 @@ async def get_post_for_response(session: AsyncSession, post_id: PostId) -> Post 
         .where(Post.id == post_id)
         .execution_options(populate_existing=True)
     )
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return await session.scalar(stmt)
 
 
 async def get_post_for_write(session: AsyncSession, post_id: PostId) -> Post | None:
@@ -206,7 +205,7 @@ async def update_post(
     session: AsyncSession,
     post_data: PostUpdatePut | PostUpdatePatch,
     existing_post: Post,
-    user_id: UserId,
+    actor_user_id: UserId,
 ) -> Post:
     if isinstance(post_data, PostUpdatePatch):
         tags_were_provided = "tags" in post_data.model_fields_set
@@ -229,7 +228,7 @@ async def update_post(
             session=session,
             post_id=existing_post.id,
             tag_names=requested_tags,
-            added_by_user_id=user_id,
+            added_by_user_id=actor_user_id,
         )
 
     await session.commit()

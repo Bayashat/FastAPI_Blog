@@ -11,6 +11,7 @@ from database import Base
 
 if TYPE_CHECKING:
     from models.post_tags import PostTag
+    from models.posts import Post
 
 
 class Tag(Base):
@@ -27,3 +28,7 @@ class Tag(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def posts(self) -> list[Post]:
+        return [link.post for link in self.post_links]

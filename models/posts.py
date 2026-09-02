@@ -61,7 +61,10 @@ class Post(Base):
 
     @property
     def tags(self) -> list[Tag]:
-        return [link.tag for link in self.tag_links]
+        return sorted(
+            [link.tag for link in self.tag_links],
+            key=lambda tag: tag.name,
+        )
 
     __table_args__ = (
         CheckConstraint(

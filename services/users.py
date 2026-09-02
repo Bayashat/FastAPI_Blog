@@ -28,14 +28,12 @@ async def get_user_by_id(session: AsyncSession, user_id: uuid.UUID) -> User | No
 
 async def get_user_by_username(session: AsyncSession, username: str) -> User | None:
     stmt = select(User).where(func.lower(User.username) == username.lower())
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return await session.scalar(stmt)
 
 
 async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     stmt = select(User).where(User.email == email)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return await session.scalar(stmt)
 
 
 async def username_or_email_exists(
