@@ -3,9 +3,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from auth import CurrentUser
 from config import settings
-from dependencies import SessionDep
+from dependencies import CurrentUser, SessionDep
 from enums import PostStatus
 from models.bookmarks import Bookmark
 from models.posts import Post

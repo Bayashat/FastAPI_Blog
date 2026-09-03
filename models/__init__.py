@@ -2,6 +2,7 @@
 
 from models.bookmarks import Bookmark
 from models.comments import Comment
+from models.follows import Follow
 from models.likes import Like
 from models.post_tags import PostTag
 from models.posts import Post
@@ -9,4 +10,14 @@ from models.pwd_reset_tokens import PasswordResetToken
 from models.tags import Tag
 from models.users import User
 
-__all__ = ("Bookmark", "Comment", "Like", "PasswordResetToken", "Post", "PostTag", "Tag", "User")
+__all__ = (
+    "Bookmark",
+    "Comment",
+    "Follow",
+    "Like",
+    "PasswordResetToken",
+    "Post",
+    "PostTag",
+    "Tag",
+    "User",
+)

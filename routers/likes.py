@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from auth import CurrentUser
-from dependencies import SessionDep
+from dependencies import CurrentUser, SessionDep
 from enums import PostStatus
 from schemas.likes import PostLikeStateResponse, PostLikeStateUpdate
 from schemas.posts import PostIdPathParam

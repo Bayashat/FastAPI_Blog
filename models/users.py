@@ -12,6 +12,7 @@ from database import Base
 if TYPE_CHECKING:
     from models.bookmarks import Bookmark
     from models.comments import Comment
+    from models.follows import Follow
     from models.likes import Like
     from models.posts import Post
     from models.pwd_reset_tokens import PasswordResetToken
@@ -49,6 +50,20 @@ class User(Base):
 
     bookmarks: Mapped[list[Bookmark]] = relationship(
         back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # 这个 User 作为 follower 的 Follow rows
+    following_links: Mapped[list[Follow]] = relationship(
+        foreign_keys="Follow.follower_id",
+        back_populates="follower",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    # 这个 User 作为 following target 的 Follow rows
+    follower_links: Mapped[list[Follow]] = relationship(
+        foreign_keys="Follow.followed_user_id",
+        back_populates="followed_user",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )

@@ -3,8 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from auth import CurrentUser, OptionalCurrentUser
-from dependencies import SessionDep
+from dependencies import CurrentUser, OptionalCurrentUser, SessionDep
 from enums import PostStatus
 from models import Post
 from schemas.posts import (

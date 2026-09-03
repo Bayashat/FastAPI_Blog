@@ -18,15 +18,17 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from auth import (
-    CurrentUser,
-    OptionalCurrentUser,
     create_access_token,
     generate_reset_token,
     hash_password,
     hash_reset_token,
 )
 from config import settings
-from dependencies import SessionDep
+from dependencies import (
+    CurrentUser,
+    OptionalCurrentUser,
+    SessionDep,
+)
 from email_utils import send_password_reset_email
 from image_utils import delete_profile_image, process_profile_image
 from models import User
