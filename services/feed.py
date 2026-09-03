@@ -16,6 +16,8 @@ from services.common import POST_COMMENT_COUNT_EXPR, POST_LIKE_COUNT_EXPR
 async def list_feed_posts(
     session: AsyncSession,
     user_id: UserId,
+    skip: int,
+    limit: int,
 ) -> Sequence[Post]:
     stmt = (
         select(Post)
@@ -47,6 +49,8 @@ async def list_feed_posts(
             Post.published_at.desc(),
             Post.id.desc(),
         )
+        .offset(skip)
+        .limit(limit)
     )
     return (await session.scalars(stmt)).all()
 

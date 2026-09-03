@@ -20,7 +20,7 @@ async def get_feed(
     limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
 ) -> PaginatedPostsResponse:
     total_count = await feed_service.count_feed_posts(session, current_user.id)
-    posts: Sequence[Post] = await feed_service.list_feed_posts(session, current_user.id)
+    posts: Sequence[Post] = await feed_service.list_feed_posts(session, current_user.id, skip, limit)
 
     has_more = skip + len(posts) < total_count
 

@@ -83,6 +83,8 @@ async def list_followers(
     followers: Sequence[User] = await follow_service.list_followers(
         session=session,
         user_id=target_user.id,
+        skip=skip,
+        limit=limit,
     )
 
     has_more = skip + len(followers) < total_count
@@ -117,6 +119,8 @@ async def list_following(
     followed_users: Sequence[User] = await follow_service.list_followed_users(
         session=session,
         user_id=target_user.id,
+        skip=skip,
+        limit=limit,
     )
 
     has_more = skip + len(followed_users) < total_count

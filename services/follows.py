@@ -49,6 +49,8 @@ async def unfollow_user(
 async def list_followers(
     session: AsyncSession,
     user_id: UserId,
+    skip: int,
+    limit: int,
 ) -> Sequence[User]:
     stmt = (
         select(User)
@@ -70,6 +72,8 @@ async def list_followers(
             Follow.followed_at.desc(),
             Follow.follower_id.desc(),
         )
+        .offset(skip)
+        .limit(limit)
     )
     return (await session.scalars(stmt)).all()
 
@@ -92,6 +96,8 @@ async def count_followers(
 async def list_followed_users(
     session: AsyncSession,
     user_id: UserId,
+    skip: int,
+    limit: int,
 ) -> Sequence[User]:
     stmt = (
         select(User)
@@ -113,6 +119,8 @@ async def list_followed_users(
             Follow.followed_at.desc(),
             Follow.followed_user_id.desc(),
         )
+        .offset(skip)
+        .limit(limit)
     )
     return (await session.scalars(stmt)).all()
 
