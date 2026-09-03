@@ -1,32 +1,13 @@
 from pydantic import AwareDatetime, BaseModel, ConfigDict
 
-from enums import PostStatus
-from schemas.common import PostContent, PostId, PostTitle, UserId
-from schemas.tags import TagResponse
+from schemas.common import PostId, UserId
+from schemas.posts import PostResponse
 from schemas.users import UserPublic
 
 
-class UserPostItem(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: PostId
-    title: PostTitle
-    content: PostContent
-    status: PostStatus
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
-    published_at: AwareDatetime | None
-
-    comments_count: int
-    likes_count: int
-
-    author: UserPublic | None
-    tags: list[TagResponse]
-
-
-class UserBookmarksResponse(BaseModel):
+class SavedPostResponse(BaseModel):
     user: UserPublic
-    bookmarks: list[UserPostItem]
+    posts: list[PostResponse]
     total: int
     skip: int
     limit: int

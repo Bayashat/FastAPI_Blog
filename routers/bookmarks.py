@@ -8,20 +8,21 @@ from config import settings
 from dependencies import SessionDep
 from enums import PostStatus
 from models.bookmarks import Bookmark
+from models.posts import Post
 from schemas.bookmarks import (
     BookmarkItem,
-    UserBookmarksResponse,
+    SavedPostResponse,
 )
 from schemas.common import PostId
 from services import bookmarks as bookmark_service
 from services import posts as post_service
 
-router = APIRouter(prefix="/api/users/me")
+router = APIRouter(prefix="/api/users/me/bookmarks")
 
 
 @router.get(
-    "/bookmarks",
-    response_model=UserBookmarksResponse,
+    "",
+    response_model=SavedPostResponse,
     status_code=status.HTTP_200_OK,
 )
 async def list_my_bookmarks(
@@ -29,21 +30,21 @@ async def list_my_bookmarks(
     user: CurrentUser,
     skip: Annotated[int, Query(ge=0)] = 0,
     limit: Annotated[int, Query(ge=1, le=100)] = settings.posts_per_page,
-) -> UserBookmarksResponse:
+) -> SavedPostResponse:
     total_count = await bookmark_service.count_bookmarks_by_user_id(session, user.id)
-    bookmarks: Sequence[Bookmark] = await bookmark_service.get_bookmarks_by_user_id(
+    bookmarked_posts: Sequence[Post] = await bookmark_service.list_bookmarked_posts(
         session,
         user.id,
         skip,
         limit,
     )
 
-    has_more = skip + len(bookmarks) < total_count
+    has_more = skip + len(bookmarked_posts) < total_count
 
-    return UserBookmarksResponse.model_validate(
+    return SavedPostResponse.model_validate(
         {
             "user": user,
-            "bookmarks": bookmarks,
+            "posts": bookmarked_posts,
             "total": total_count,
             "skip": skip,
             "limit": limit,
@@ -53,7 +54,7 @@ async def list_my_bookmarks(
 
 
 @router.put(
-    "/bookmarks/{post_id}",
+    "/{post_id}",
     response_model=BookmarkItem,
     status_code=status.HTTP_200_OK,
 )
@@ -71,27 +72,27 @@ async def add_bookmark(
 
     new_bookmark = await bookmark_service.add_bookmark(
         session,
-        post_id,
         user.id,
+        post_id,
     )
     return new_bookmark
 
 
 @router.delete(
-    "/bookmarks/{post_id}",
-    status_code=status.HTTP_200_OK,
+    "/{post_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_bookmark(
     session: SessionDep,
     post_id: PostId,
     user: CurrentUser,
-):
-    existing_bookmark = await bookmark_service.get_bookmark_by_post_id(
+) -> None:
+    existing_bookmark = await bookmark_service.get_bookmark(
         session,
-        post_id,
         user.id,
+        post_id,
     )
-    if not existing_bookmark or (existing_bookmark.user_id != user.id):
+    if not existing_bookmark:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bookmark not found!")
 
     await bookmark_service.delete_bookmark(

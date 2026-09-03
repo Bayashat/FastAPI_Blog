@@ -1,6 +1,6 @@
 from collections.abc import Sequence
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload, with_expression
@@ -33,12 +33,12 @@ async def count_bookmarks_by_user_id(
     return (await session.execute(stmt)).scalar_one()
 
 
-async def get_bookmarks_by_user_id(
+async def list_bookmarked_posts(
     session: AsyncSession,
     user_id: UserId,
     skip: int,
     limit: int,
-) -> Sequence[Bookmark]:
+) -> Sequence[Post]:
     stmt = (
         select(Post)
         .join(
@@ -67,7 +67,7 @@ async def get_bookmarks_by_user_id(
         )
         .order_by(
             Bookmark.saved_at.desc(),
-            Post.id.desc(),
+            Bookmark.post_id.desc(),
         )
         .offset(skip)
         .limit(limit)
@@ -77,8 +77,8 @@ async def get_bookmarks_by_user_id(
 
 async def add_bookmark(
     session: AsyncSession,
-    post_id: PostId,
     user_id: UserId,
+    post_id: PostId,
 ) -> Bookmark:
     stmt = (
         insert(Bookmark)
@@ -87,23 +87,36 @@ async def add_bookmark(
             user_id=user_id,
         )
         .on_conflict_do_nothing(
-            index_elements=[Bookmark.post_id, Bookmark.user_id],
+            index_elements=[
+                Bookmark.user_id,
+                Bookmark.post_id,
+            ],
         )
-        .returning(Bookmark)
     )
 
-    result = await session.execute(stmt)
+    await session.execute(stmt)
     await session.commit()
 
-    return result.scalar_one()
+    bookmark = await get_bookmark(session, user_id, post_id)
+    if bookmark is None:
+        raise RuntimeError("Bookmark could not be loaded")
+
+    return bookmark
 
 
-async def get_bookmark_by_post_id(
+async def get_bookmark(
     session: AsyncSession,
-    post_id: PostId,
     user_id: UserId,
+    post_id: PostId,
 ) -> Bookmark | None:
-    return await session.get(Bookmark, (post_id, user_id))
+    # 推荐 复合 PK 永远用 dict, 不用记顺序
+    return await session.get(
+        Bookmark,
+        {
+            "user_id": user_id,
+            "post_id": post_id,
+        },
+    )
 
 
 async def delete_bookmark(
@@ -112,3 +125,13 @@ async def delete_bookmark(
 ) -> None:
     await session.delete(existing_bookmark)
     await session.commit()
+
+
+async def delete_bookmarks_for_post(
+    session: AsyncSession,
+    post_id: PostId,
+) -> None:
+    stmt = delete(Bookmark).where(
+        Bookmark.post_id == post_id,
+    )
+    await session.execute(stmt)

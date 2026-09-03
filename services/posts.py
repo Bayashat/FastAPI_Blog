@@ -22,6 +22,7 @@ from schemas.posts import (
     PostUpdatePatch,
     PostUpdatePut,
 )
+from services import bookmarks as bookmark_service
 from services import tags as tag_service
 from services.common import POST_COMMENT_COUNT_EXPR, POST_LIKE_COUNT_EXPR
 
@@ -287,6 +288,11 @@ async def archive_post(session: AsyncSession, post: Post) -> Post:
         raise InvalidPostTransitionError
 
     post.status = PostStatus.ARCHIVED
+
+    await bookmark_service.delete_bookmarks_for_post(
+        session,
+        post.id,
+    )
 
     await session.commit()
 
