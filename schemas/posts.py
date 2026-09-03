@@ -18,15 +18,10 @@ from pydantic_core import PydanticCustomError
 
 from config import settings
 from enums import PostStatus
-from schemas.common import PostId, UserId
+from schemas.common import PostContent, PostId, PostTitle, UserId
 from schemas.tags import TagName, TagResponse
 from schemas.users import UserPublic
 
-PostTitle = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=255),
-]
-PostContent = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 PostIdPathParam = Annotated[uuid.UUID, Path(title="Post ID", description="The unique identifier of the post")]
 PostSearchParam = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 

@@ -14,6 +14,7 @@ from database import Base
 from enums import PostStatus
 
 if TYPE_CHECKING:
+    from models.bookmarks import Bookmark
     from models.comments import Comment
     from models.likes import Like
     from models.post_tags import PostTag
@@ -88,6 +89,11 @@ class Post(Base):
     # cascade="all, delete-orphan" 表示: 删除 post 时, 相关对象也应该删除
     # passive_deletes: Trust the DB's ON DELETE CASCADE, so SQLAlchemy does not load all children on post delete.
     likes: Mapped[list[Like]] = relationship(
+        back_populates="post",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    bookmarks: Mapped[list[Bookmark]] = relationship(
         back_populates="post",
         cascade="all, delete-orphan",
         passive_deletes=True,

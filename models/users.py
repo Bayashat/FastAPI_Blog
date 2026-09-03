@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database import Base
 
 if TYPE_CHECKING:
+    from models.bookmarks import Bookmark
     from models.comments import Comment
     from models.likes import Like
     from models.posts import Post
@@ -41,6 +42,12 @@ class User(Base):
         passive_deletes=True,
     )
     likes: Mapped[list[Like]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    bookmarks: Mapped[list[Bookmark]] = relationship(
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,

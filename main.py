@@ -21,7 +21,7 @@ from dependencies import SessionDep
 from enums import PostStatus
 from middleware import RequestBodySizeLimitMiddleware
 from models import Post
-from routers import comments, likes, posts, tags, users
+from routers import bookmarks, comments, likes, posts, tags, users
 from schemas.posts import PostListParams, PostSortField
 from services import posts as posts_service
 from services import users as users_service
@@ -46,6 +46,7 @@ class Tags(StrEnum):
     comments = "comments"
     likes = "likes"
     tags = "tags"
+    bookmarks = "bookmarks"
 
 
 app = FastAPI(lifespan=lifespan)
@@ -74,6 +75,7 @@ app.include_router(comments.post_comments_router, tags=[Tags.comments])
 app.include_router(comments.comments_router, tags=[Tags.comments])
 app.include_router(likes.router, tags=[Tags.likes])
 app.include_router(tags.router, tags=[Tags.tags])
+app.include_router(bookmarks.router, tags=[Tags.bookmarks])
 
 # ---------------- Auth pages ------------------
 
