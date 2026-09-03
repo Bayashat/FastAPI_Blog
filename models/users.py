@@ -54,14 +54,14 @@ class User(Base):
         passive_deletes=True,
     )
     # 这个 User 作为 follower 的 Follow rows
-    following_links: Mapped[list[Follow]] = relationship(
+    outgoing_follows: Mapped[list[Follow]] = relationship(
         foreign_keys="Follow.follower_id",
         back_populates="follower",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
     # 这个 User 作为 following target 的 Follow rows
-    follower_links: Mapped[list[Follow]] = relationship(
+    incoming_follows: Mapped[list[Follow]] = relationship(
         foreign_keys="Follow.followed_user_id",
         back_populates="followed_user",
         cascade="all, delete-orphan",

@@ -29,15 +29,19 @@ class Follow(Base):
             """,
             name="no_self_follow",
         ),
-        Index("ix_follows_follower_created_at_followed_user", follower_id, followed_at.desc(), followed_user_id.desc()),
-        Index("ix_follows_followed_user_created_at_follower", followed_user_id, followed_at.desc(), follower_id.desc()),
+        Index(
+            "ix_follows_follower_followed_at_followed_user", follower_id, followed_at.desc(), followed_user_id.desc()
+        ),
+        Index(
+            "ix_follows_followed_user_followed_at_follower", followed_user_id, followed_at.desc(), follower_id.desc()
+        ),
     )
 
     follower: Mapped[User] = relationship(
         foreign_keys=[follower_id],
-        back_populates="following_links",
+        back_populates="outgoing_follows",
     )
     followed_user: Mapped[User] = relationship(
         foreign_keys=[followed_user_id],
-        back_populates="follower_links",
+        back_populates="incoming_follows",
     )
